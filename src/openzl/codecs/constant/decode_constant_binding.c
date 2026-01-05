@@ -4,6 +4,7 @@
 #include "openzl/codecs/constant/decode_constant_kernel.h"
 
 #include "openzl/common/assertion.h"
+#include "openzl/shared/bits.h"   // ZL_isLittleEndian()
 #include "openzl/shared/varint.h"
 #include "openzl/zl_data.h"
 
@@ -69,6 +70,7 @@ ZL_Report DI_constant_numeric(ZL_Decoder* dictx, const ZL_Input* ins[])
             corruption,
             eltWidth != 1 && eltWidth != 2 && eltWidth != 4 && eltWidth != 8,
             "Invalid element width for constant_numeric");
+    ZL_ASSERT(ZL_isLittleEndian(), "Big endian support not implemented yet");
 
     /* Decode header: varint(nbElts) */
     ZL_RBuffer const header = ZL_Decoder_getCodecHeader(dictx);

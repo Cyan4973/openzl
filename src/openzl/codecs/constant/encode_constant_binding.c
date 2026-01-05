@@ -6,6 +6,7 @@
 #include "openzl/common/assertion.h"
 #include "openzl/common/errors_internal.h"
 #include "openzl/compress/enc_interface.h"
+#include "openzl/shared/bits.h"   // ZL_isLittleEndian()
 #include "openzl/shared/varint.h"
 #include "openzl/zl_data.h"
 #include "openzl/zl_errors.h"
@@ -66,6 +67,7 @@ EI_constant_numeric(ZL_Encoder* eictx, const ZL_Input* ins[], size_t nbIns)
 
     ZL_RET_R_IF_LT(srcSize_tooSmall, nbElts, 1);
     ZL_ASSERT(eltWidth == 1 || eltWidth == 2 || eltWidth == 4 || eltWidth == 8);
+    ZL_ASSERT(ZL_isLittleEndian(), "Big endian support not implemented yet");
     ZL_RET_R_IF_EQ(
             node_invalid_input, ZS_isConstantStream(src, nbElts, eltWidth), 0);
 
