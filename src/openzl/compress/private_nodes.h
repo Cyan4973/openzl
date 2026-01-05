@@ -50,6 +50,7 @@ extern "C" {
 // Example 2 : 300 300 300 as 3 fields of size 3 => 300 as 1 field of size 3
 #define ZL_NODE_CONSTANT_SERIAL (ZL_NodeID){ZL_PrivateStandardNodeID_constant_serial}
 #define ZL_NODE_CONSTANT_FIXED (ZL_NodeID){ZL_PrivateStandardNodeID_constant_fixed}
+#define ZL_NODE_CONSTANT_NUMERIC (ZL_NodeID){ZL_PrivateStandardNodeID_constant_numeric}
 
 #define ZL_NODE_TOKENIZE    ZL_NODE_TOKENIZE_STRUCT
 #define ZL_NODE_TOKENIZE_SORTED (ZL_NodeID){ZL_PrivateStandardNodeID_tokenize_sorted}
@@ -123,6 +124,7 @@ typedef enum {
 
     ZL_PrivateStandardNodeID_constant_serial,
     ZL_PrivateStandardNodeID_constant_fixed,
+    ZL_PrivateStandardNodeID_constant_numeric,
 
     ZL_PrivateStandardNodeID_tokenize_sorted,
     ZL_PrivateStandardNodeID_tokenize_string_sorted,
@@ -171,6 +173,7 @@ typedef enum {
 
     ZL_PrivateStandardGraphID_constant_serial,
     ZL_PrivateStandardGraphID_constant_fixed,
+    ZL_PrivateStandardGraphID_constant_numeric,
 
     ZL_PrivateStandardGraphID_fse_ncount,
 
@@ -214,6 +217,7 @@ typedef enum {
 
 #define ZL_GRAPH_CONSTANT_SERIAL (ZL_GraphID){ZL_PrivateStandardGraphID_constant_serial}
 #define ZL_GRAPH_CONSTANT_FIXED (ZL_GraphID){ZL_PrivateStandardGraphID_constant_fixed}
+#define ZL_GRAPH_CONSTANT_NUMERIC (ZL_GraphID){ZL_PrivateStandardGraphID_constant_numeric}
 
 #define ZL_GRAPH_SELECT_GENERIC_LZ   (ZL_GraphID){ZL_StandardGraphID_select_generic_lz_backend}
 

@@ -122,6 +122,7 @@ const CNode ER_standardNodes[STANDARD_ENCODERS_NB] = {
     REGISTER_TRANSFORM(ZL_PrivateStandardNodeID_split_by_struct, ZL_StandardTransformID_splitByStruct, ZL_StandardTransformMinVersion_splitByStruct, EI_SPLITBYSTRUCT),
     REGISTER_TRANSFORM(ZL_PrivateStandardNodeID_constant_serial, ZL_StandardTransformID_constant_serial, 11, EI_CONSTANT_SERIALIZED),
     REGISTER_TRANSFORM(ZL_PrivateStandardNodeID_constant_fixed, ZL_StandardTransformID_constant_fixed, 11, EI_CONSTANT_FIXED),
+    REGISTER_TRANSFORM(ZL_PrivateStandardNodeID_constant_numeric, ZL_StandardTransformID_constant_numeric, 24, EI_CONSTANT_NUMERIC),
     REGISTER_TRANSFORM(ZL_PrivateStandardNodeID_tokenize_sorted, ZL_StandardTransformID_tokenize_numeric, 8, EI_TOKENIZE_SORTED),
     REGISTER_TRANSFORM(ZL_PrivateStandardNodeID_tokenize_string_sorted, ZL_StandardTransformID_tokenize_string, 11, EI_TOKENIZE_VSF_SORTED),
     REGISTER_TRANSFORM(ZL_PrivateStandardNodeID_dedup_num_trusted, ZL_StandardTransformID_dedup_num, 16, EI_DEDUP_NUM_TRUSTED),

@@ -6,8 +6,9 @@
 
 /* SI_selector_constant():
  *
- * The goal of this selector is to select between serialized and
- * fixed-size constant encoding given an input that can be either type
+ * The goal of this selector is to select between serialized,
+ * fixed-size, or numeric constant encoding given an input that can be any of
+ * these types.
  */
 
 ZL_GraphID SI_selector_constant(
@@ -20,12 +21,17 @@ ZL_GraphID SI_selector_constant(
     (void)customGraphs;
     (void)nbCustomGraphs;
 
+    ZL_Type const inType = ZL_Input_type(inputStream);
     ZL_ASSERT(
-            ZL_Input_type(inputStream) == ZL_Type_serial
-            || ZL_Input_type(inputStream) == ZL_Type_struct);
+            inType == ZL_Type_serial || inType == ZL_Type_struct
+            || inType == ZL_Type_numeric);
     ZL_ASSERT_GE(ZL_Input_eltWidth(inputStream), 1);
 
-    return ZL_Input_type(inputStream) == ZL_Type_serial
-            ? ZL_GRAPH_CONSTANT_SERIAL
-            : ZL_GRAPH_CONSTANT_FIXED;
+    switch (inType) {
+        case ZL_Type_serial: return ZL_GRAPH_CONSTANT_SERIAL;
+        case ZL_Type_struct: return ZL_GRAPH_CONSTANT_FIXED;
+        case ZL_Type_numeric: return ZL_GRAPH_CONSTANT_NUMERIC;
+        case ZL_Type_string: /* fallthrough - not supported */
+        default: ZL_REQUIRE(0, "Unsupported input type for constant selector");
+    }
 }

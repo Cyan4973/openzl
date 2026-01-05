@@ -14,6 +14,9 @@ ZL_BEGIN_C_DECLS
 ZL_Report
 EI_constant_typed(ZL_Encoder* eictx, const ZL_Input* ins[], size_t nbIns);
 
+ZL_Report
+EI_constant_numeric(ZL_Encoder* eictx, const ZL_Input* ins[], size_t nbIns);
+
 #define EI_CONSTANT_SERIALIZED(id)                  \
     { .gd          = SERIALIZED_CONSTANT_GRAPH(id), \
       .transform_f = EI_constant_typed,             \
@@ -23,6 +26,11 @@ EI_constant_typed(ZL_Encoder* eictx, const ZL_Input* ins[], size_t nbIns);
     { .gd          = FIXED_SIZE_CONSTANT_GRAPH(id), \
       .transform_f = EI_constant_typed,             \
       .name        = "!zl.private.constant_fixed" }
+
+#define EI_CONSTANT_NUMERIC(id)                     \
+    { .gd          = NUMERIC_CONSTANT_GRAPH(id),    \
+      .transform_f = EI_constant_numeric,           \
+      .name        = "!zl.private.constant_numeric" }
 
 ZL_INLINE bool ZL_Graph_isConstantSupported(const ZL_Graph* graph)
 {

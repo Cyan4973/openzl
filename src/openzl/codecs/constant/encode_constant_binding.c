@@ -5,6 +5,7 @@
 
 #include "openzl/common/assertion.h"
 #include "openzl/common/errors_internal.h"
+#include "openzl/compress/enc_interface.h"
 #include "openzl/shared/varint.h"
 #include "openzl/zl_data.h"
 #include "openzl/zl_errors.h"
@@ -40,5 +41,43 @@ EI_constant_typed(ZL_Encoder* eictx, const ZL_Input* ins[], size_t nbIns)
 
     ZS_encodeConstant(outPtr, src, eltWidth);
     ZL_RET_R_IF_ERR(ZL_Output_commit(out, 1));
+    return ZL_returnSuccess();
+}
+
+/* EI_constant_numeric():
+ * Encodes a constant numeric stream directly to serial output.
+ * Header format: varint(nbElts)
+ * Output: single element value (eltWidth bytes) as serial stream
+ * Note: eltWidth is inferred from the serial output size at decompression time.
+ */
+ZL_Report
+EI_constant_numeric(ZL_Encoder* eictx, const ZL_Input* ins[], size_t nbIns)
+{
+    ZL_ASSERT_EQ(nbIns, 1);
+    ZL_ASSERT_NN(ins);
+    const ZL_Input* in = ins[0];
+    ZL_ASSERT_NN(eictx);
+    ZL_ASSERT_NN(in);
+    ZL_ASSERT_EQ(ZL_Input_type(in), ZL_Type_numeric);
+
+    const uint8_t* const src = ZL_Input_ptr(in);
+    size_t const nbElts      = ZL_Input_numElts(in);
+    size_t const eltWidth    = ZL_Input_eltWidth(in);
+
+    ZL_RET_R_IF_LT(srcSize_tooSmall, nbElts, 1);
+    ZL_ASSERT(eltWidth == 1 || eltWidth == 2 || eltWidth == 4 || eltWidth == 8);
+    ZL_RET_R_IF_EQ(
+            node_invalid_input, ZS_isConstantStream(src, nbElts, eltWidth), 0);
+
+    /* Encode header: just nbElts (eltWidth is inferred from output size) */
+    uint8_t header[ZL_VARINT_LENGTH_64];
+    size_t const varintSize = ZL_varintEncode((uint64_t)nbElts, header);
+    ZL_Encoder_sendCodecHeader(eictx, header, varintSize);
+
+    /* Output: serial stream containing the single constant element */
+    ZL_RET_R_IF_NULL(
+            allocation,
+            ENC_refTypedStream(eictx, 0, 1, eltWidth, in, 0));
+
     return ZL_returnSuccess();
 }

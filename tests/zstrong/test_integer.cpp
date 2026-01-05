@@ -282,5 +282,28 @@ TEST_F(IntegerTest, FSENCount)
     }
 }
 
+TEST_F(IntegerTest, ConstantNumeric)
+{
+    const std::vector<size_t> sizes = { 1, 10, 100, 1000, 10000 };
+    for (size_t eltWidth : { size_t(1), size_t(2), size_t(4), size_t(8) }) {
+        for (size_t size : sizes) {
+            // Test with a non-zero constant value
+            uint64_t constantValue = 0x42;
+            if (eltWidth >= 2)
+                constantValue = 0x1234;
+            if (eltWidth >= 4)
+                constantValue = 0x12345678;
+            if (eltWidth >= 8)
+                constantValue = 0x123456789ABCDEF0ULL;
+
+            std::string inputStr(size * eltWidth, 0);
+            for (size_t i = 0; i < size; ++i) {
+                memcpy(inputStr.data() + i * eltWidth, &constantValue, eltWidth);
+            }
+            testNodeOnInput(ZL_NODE_CONSTANT_NUMERIC, eltWidth, inputStr);
+        }
+    }
+}
+
 } // namespace tests
 } // namespace openzl

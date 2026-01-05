@@ -122,6 +122,7 @@ const StandardDTransform SDecoders_array[ZL_StandardTransformID_end] = {
     REGISTER_TTRANSFORM(ZL_StandardTransformID_merge_sorted, 9, MERGE_SORTED),
     REGISTER_TTRANSFORM_G(ZL_StandardTransformID_constant_serial, 11, DI_CONSTANT_SERIALIZED, SERIALIZED_CONSTANT_GRAPH),
     REGISTER_TTRANSFORM_G(ZL_StandardTransformID_constant_fixed, 11, DI_CONSTANT_FIXED, FIXED_SIZE_CONSTANT_GRAPH),
+    REGISTER_TTRANSFORM_G(ZL_StandardTransformID_constant_numeric, 24, DI_CONSTANT_NUMERIC, NUMERIC_CONSTANT_GRAPH),
     REGISTER_TTRANSFORM(ZL_StandardTransformID_prefix, 11, PREFIX),
     REGISTER_TTRANSFORM_G(ZL_StandardTransformID_divide_by, 16, DI_DIVIDE_BY_INT, NUMPIPE_GRAPH),
     REGISTER_TTRANSFORM(ZL_StandardTransformID_parse_int, 19, PARSE_INT),

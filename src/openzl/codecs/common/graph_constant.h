@@ -24,4 +24,11 @@
         .soTypes    = ZL_STREAMTYPELIST(ZL_Type_struct), \
     }
 
+#define NUMERIC_CONSTANT_GRAPH(id)                        \
+    {                                                     \
+        .CTid       = id,                                 \
+        .inputTypes = ZL_STREAMTYPELIST(ZL_Type_numeric), \
+        .soTypes    = ZL_STREAMTYPELIST(ZL_Type_serial),  \
+    }
+
 #endif

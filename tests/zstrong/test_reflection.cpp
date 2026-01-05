@@ -135,9 +135,9 @@ TEST_F(ReflectionTest, Conversion)
     initializeReflectionCtx(graph, data);
 
     ASSERT_EQ(
-            ZL_ReflectionCtx_getTotalTransformHeaderSize_lastChunk(rctx_), 2u);
+            ZL_ReflectionCtx_getTotalTransformHeaderSize_lastChunk(rctx_), 1u);
 
-    ASSERT_EQ(ZL_ReflectionCtx_getNumCodecs_lastChunk(rctx_), 4u);
+    ASSERT_EQ(ZL_ReflectionCtx_getNumCodecs_lastChunk(rctx_), 2u);
     ASSERT_EQ(ZL_ReflectionCtx_getNumStoredOutputs_lastChunk(rctx_), 1u);
     const auto storedStream =
             ZL_ReflectionCtx_getStoredOutput_lastChunk(rctx_, 0u);
