@@ -15,9 +15,9 @@ class Constant : public SimpleGraph<Constant> {
     static constexpr GraphID graph = ZL_GRAPH_CONSTANT;
 
     static constexpr GraphMetadata<1> metadata = {
-        .inputs = { InputMetadata{ .typeMask =
-                                           TypeMask::Serial | TypeMask::Struct,
-                                   .name = "constant data" } },
+        .inputs = { InputMetadata{
+                .typeMask = TypeMask::Serial | TypeMask::Struct | TypeMask::Numeric,
+                .name = "constant data" } },
         .description =
                 "Encode a constant input as a singleton value and size pair"
     };
