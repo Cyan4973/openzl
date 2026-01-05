@@ -4,13 +4,16 @@
 #include "openzl/common/assertion.h"
 #include "openzl/compress/private_nodes.h"
 
-/* Returns non-zero if the first element is all zeros */
-static int isZeroConstant(const ZL_Input* inputStream)
+/* Returns non-zero if all bytes of the first element are identical.
+ * This covers 0x00..00, 0xFF..FF, 0x55..55, etc.
+ * For such patterns, Serial path is equally efficient. */
+static int isSingleBytePattern(const ZL_Input* inputStream)
 {
     const uint8_t* ptr = ZL_Input_ptr(inputStream);
     size_t const eltWidth = ZL_Input_eltWidth(inputStream);
-    for (size_t i = 0; i < eltWidth; ++i) {
-        if (ptr[i] != 0) return 0;
+    uint8_t const firstByte = ptr[0];
+    for (size_t i = 1; i < eltWidth; ++i) {
+        if (ptr[i] != firstByte) return 0;
     }
     return 1;
 }
@@ -21,8 +24,9 @@ static int isZeroConstant(const ZL_Input* inputStream)
  * fixed-size, or numeric constant encoding given an input that can be any of
  * these types.
  *
- * For numeric types, zeros are routed to CONSTANT_SERIAL (more efficient),
- * while non-zeros use CONSTANT_NUMERIC.
+ * For numeric types, single-byte patterns (0x00, 0xFF, 0x55, etc.) are routed
+ * to CONSTANT_SERIAL (more efficient), while other constants use
+ * CONSTANT_NUMERIC.
  */
 
 ZL_GraphID SI_selector_constant(
@@ -45,8 +49,8 @@ ZL_GraphID SI_selector_constant(
         case ZL_Type_serial: return ZL_GRAPH_CONSTANT_SERIAL;
         case ZL_Type_struct: return ZL_GRAPH_CONSTANT_FIXED;
         case ZL_Type_numeric:
-            /* Zeros are more efficiently handled via serial path */
-            if (isZeroConstant(inputStream)) {
+            /* Single-byte patterns (0x00, 0xFF, etc.) use serial path */
+            if (isSingleBytePattern(inputStream)) {
                 return ZL_GRAPH_CONSTANT_SERIAL;
             }
             return ZL_GRAPH_CONSTANT_NUMERIC;
