@@ -91,6 +91,13 @@ class TrainArgs : public GlobalArgs, public ProfileArgs {
                 "is exceeded.");
         parser.addCommandFlag(
                 cmd(),
+                kMaxGenerations,
+                0,
+                true,
+                "Maximum number of generations for the ACE genetic algorithm. "
+                "Defaults to 250.");
+        parser.addCommandFlag(
+                cmd(),
                 kMaxFileSizeMb,
                 0,
                 true,
@@ -163,6 +170,10 @@ class TrainArgs : public GlobalArgs, public ProfileArgs {
         if (maxTimeSecs) {
             trainParams.maxTimeSecs = std::stoul(maxTimeSecs.value());
         }
+        auto maxGenerations = parsed.cmdFlag(cmd(), kMaxGenerations);
+        if (maxGenerations) {
+            trainParams.maxGenerations = std::stoul(maxGenerations.value());
+        }
         useAllSamples      = parsed.cmdHasFlag(cmd(), kUseAllSamples);
         auto maxFileSizeMb = parsed.cmdFlag(cmd(), kMaxFileSizeMb);
         if (maxFileSizeMb) {
@@ -220,6 +231,7 @@ class TrainArgs : public GlobalArgs, public ProfileArgs {
     inline static const std::string kNoAceSuccessors = "no-ace-successors";
     inline static const std::string kNoClustering    = "no-clustering";
     inline static const std::string kMaxTimeSecs     = "max-time-secs";
+    inline static const std::string kMaxGenerations  = "max-generations";
     inline static const std::string kMaxFileSizeMb   = "max-file-size-mb";
     inline static const std::string kMaxTotalSizeMb  = "max-total-size-mb";
     inline static const std::string kParetoFrontier  = "pareto-frontier";

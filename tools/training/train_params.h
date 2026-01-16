@@ -26,6 +26,7 @@ struct TrainParams {
     bool noAceSuccessors{ false };
     bool noClustering{ false };
     poly::optional<size_t> maxTimeSecs;
+    poly::optional<size_t> maxGenerations;
     poly::optional<size_t> maxFileSizeMb;
     poly::optional<size_t> maxTotalSizeMb;
     bool paretoFrontier{ false };
