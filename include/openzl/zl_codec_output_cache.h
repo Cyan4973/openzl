@@ -56,7 +56,11 @@ typedef struct {
     size_t refParamSkips; // invocations not cached: codec used refParams
     size_t dictSkips;     // invocations not cached: dict-backed codec
     size_t otherSkips;    // invocations not cached: other (e.g. string output)
-    size_t bytesStored;   // payload bytes currently held
+    size_t bytesStored;   // payload bytes currently held (counts vs the budget)
+    size_t arenaBytes;    // memory the cache arena has actually reserved
+                          // (>= bytesStored: chunk rounding + the map). The
+                          // arena only grows within a session, so this doubles
+                          // as the arena's high-water mark.
     size_t overflowed;    // nb of times the byte budget was exceeded
 } ZL_CodecOutputCache_Stats;
 

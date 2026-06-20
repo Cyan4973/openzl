@@ -110,7 +110,13 @@ ZL_CodecOutputCache_Stats ZL_CodecOutputCache_getStats(
         const ZL_CodecOutputCache* cache)
 {
     ZL_ASSERT_NN(cache);
-    return cache->stats;
+    ZL_CodecOutputCache_Stats stats = cache->stats;
+    // Actual bytes the arena has reserved from the heap (>= bytesStored: chunk
+    // rounding + the map live here too). Computed on demand -- it walks the
+    // arena's allocation list -- but the arena only grows within a session, so
+    // reading it yields the high-water mark.
+    stats.arenaBytes = ALLOC_Arena_memAllocated(cache->arena);
+    return stats;
 }
 
 void COC_recordSkip(ZL_CodecOutputCache* cache, COC_SkipReason reason)
