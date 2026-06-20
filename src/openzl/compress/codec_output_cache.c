@@ -162,7 +162,8 @@ ZL_Report COC_insert(
     size_t need = key->copyParamsSize + entry->headerSize
             + entry->nbOutputs * sizeof(COC_Output);
     for (size_t i = 0; i < entry->nbOutputs; i++) {
-        need += entry->outputs[i].contentSize;
+        need += entry->outputs[i].contentSize
+                + entry->outputs[i].nbIntMetas * sizeof(COC_IntMeta);
     }
     if (cache->curBytes + need > cache->maxBytes) {
         cache->stats.overflowed++;
@@ -201,6 +202,18 @@ ZL_Report COC_insert(
             } else {
                 outs[i].content = NULL;
             }
+            if (entry->outputs[i].nbIntMetas != 0) {
+                COC_IntMeta* meta = ALLOC_Arena_malloc(
+                        cache->arena,
+                        entry->outputs[i].nbIntMetas * sizeof(COC_IntMeta));
+                ZL_ERR_IF_NULL(meta, allocation);
+                memcpy(meta,
+                       entry->outputs[i].intMetas,
+                       entry->outputs[i].nbIntMetas * sizeof(COC_IntMeta));
+                outs[i].intMetas = meta;
+            } else {
+                outs[i].intMetas = NULL;
+            }
         }
         v.outputs = outs;
     } else {
@@ -225,7 +238,7 @@ ZL_Report COC_insert(
     // The caller only inserts after a miss, so the key should be new. If it is
     // somehow already present the freshly-copied blobs simply stay in the arena
     // until reset; this is harmless and never happens on the intended path.
-    ZL_ASSERT(inserted.inserted);
+    ZL_ASSERT(inserted.inserted); // caller only inserts after a miss
     if (inserted.inserted) {
         cache->curBytes += need;
         cache->stats.bytesStored = cache->curBytes;

@@ -234,6 +234,11 @@ unsigned CCTX_getSegmenterDepth(const ZL_CCtx* cctx);
  */
 ZL_Report CCTX_sendTrHeader(ZL_CCtx* cctx, RTNodeID rtnodeid, ZL_RBuffer trh);
 
+/* Read back the codec header bytes staged for @rtnodeid via CCTX_sendTrHeader.
+ * Returns an empty buffer if no header was sent. Used to snapshot a codec's
+ * output for the codec-output cache. */
+ZL_RBuffer CCTX_getNodeHeader(ZL_CCtx* cctx, RTNodeID rtnodeid);
+
 /**
  * @brief Start the compression process with the provided input data.
  *

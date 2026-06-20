@@ -238,6 +238,14 @@ size_t STREAM_byteCapacity(const Stream* s);
 ZL_Report STREAM_setIntMetadata(Stream* s, int mId, int mValue);
 ZL_IntMetadata STREAM_getIntMetadata(const Stream* s, int mId);
 
+/* Enumerate all int-metadata entries on a stream, e.g. to snapshot them. */
+size_t STREAM_nbIntMetadata(const Stream* s);
+void STREAM_getIntMetadataByIndex(
+        const Stream* s,
+        size_t idx,
+        int* mId,
+        int* mValue);
+
 /**
  * Hash the content of all streams provided in @p streams.
  * Only meaningful when all streams have been committed.

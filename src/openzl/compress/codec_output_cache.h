@@ -34,13 +34,26 @@ typedef struct {
     const void* copyParams; // borrowed at lookup; cache-arena-owned once stored
 } COC_Key;
 
+/** An int-metadata entry attached to a stream (see STREAM_setIntMetadata). */
+typedef struct {
+    int mId;
+    int mValue;
+} COC_IntMeta;
+
 /** One memoized output stream of a codec invocation. */
 typedef struct {
     ZL_Type type;
+    // The codec's output-port index this stream was created from. Variable-
+    // output codecs create every stream from a single VO port (e.g. all of
+    // transpose_split's outputs use index 0), so replaying by sequential
+    // position would read past the declared port types and mistype the stream.
+    int outcomeIndex;
     size_t eltWidth;
     size_t numElts;
     size_t contentSize;
-    const void* content; // cache-arena-owned once stored
+    const void* content;         // cache-arena-owned once stored
+    const COC_IntMeta* intMetas; // cache-arena-owned once stored (or NULL)
+    size_t nbIntMetas;
 } COC_Output;
 
 /** The memoized result of a single codec invocation. */

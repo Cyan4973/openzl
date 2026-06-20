@@ -16,6 +16,7 @@
 #include "openzl/compress/cctx.h"               // ZS2_CCtx_*
 #include "openzl/compress/cgraph.h"             // CGRAPH_*
 #include "openzl/compress/cnode.h"              // CNODE_*
+#include "openzl/compress/codec_output_cache.h" // ZL_CodecOutputCache, COC_*
 #include "openzl/compress/dyngraph_interface.h" // GCtx
 #include "openzl/compress/enc_interface.h"      // ENC_*
 #include "openzl/compress/gcparams.h"           // GCParams
@@ -132,9 +133,11 @@ struct ZL_CCtx_s {
     ZL_Compressor* internal_cgraph;
     RTGraph rtgraph;
     CachedStates cachedCodecStates; // @note valid for single-thread only
-    GCParams requestedGCParams;     // User selection, at CCtx level
-    GCParams appliedGCParams;       // Employed at compression time;
-                                    // CCtx > Compressor > default
+    ZL_CodecOutputCache*
+            codecOutputCache;   // borrowed; NULL = disabled (default)
+    GCParams requestedGCParams; // User selection, at CCtx level
+    GCParams appliedGCParams;   // Employed at compression time;
+                                // CCtx > Compressor > default
     /// Comment to be added to the header. Is not added when size is 0.
     ZL_Comment comment;
     CCTX_TransformHeaders trHeaders;
@@ -422,6 +425,36 @@ ZL_Report CCTX_sendTrHeader(ZL_CCtx* cctx, RTNodeID rtnodeid, ZL_RBuffer trh)
             &cctx->rtgraph,
             rtnodeid,
             (NodeHeaderSegment){ headerPos, trh.size });
+    return ZL_returnSuccess();
+}
+
+// Read back the codec header bytes staged for @rtnodeid (see
+// CCTX_sendTrHeader). Returns an empty buffer if no header was sent.
+ZL_RBuffer CCTX_getNodeHeader(ZL_CCtx* cctx, RTNodeID rtnodeid)
+{
+    ZL_ASSERT_NN(cctx);
+    NodeHeaderSegment const seg =
+            RTGM_nodeHeaderSegment(&cctx->rtgraph, rtnodeid);
+    uint8_t const* const base =
+            VECTOR_DATA(cctx->trHeaders.stagingHeaderStream);
+    return (ZL_RBuffer){ base + seg.startPos, seg.len };
+}
+
+// --------------------------
+// Codec output cache (borrowed; off by default)
+// --------------------------
+
+ZL_CodecOutputCache* CCTX_getCodecOutputCache(const ZL_CCtx* cctx)
+{
+    ZL_ASSERT_NN(cctx);
+    return cctx->codecOutputCache;
+}
+
+ZL_Report ZL_CCtx_setCodecOutputCache(ZL_CCtx* cctx, ZL_CodecOutputCache* cache)
+{
+    ZL_RESULT_DECLARE_SCOPE_REPORT(cctx);
+    ZL_ASSERT_NN(cctx);
+    cctx->codecOutputCache = cache;
     return ZL_returnSuccess();
 }
 

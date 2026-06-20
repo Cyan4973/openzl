@@ -1114,6 +1114,25 @@ ZL_IntMetadata STREAM_getIntMetadata(const Stream* s, int mId)
     };
 }
 
+size_t STREAM_nbIntMetadata(const Stream* s)
+{
+    ZL_ASSERT_NN(s);
+    return VECTOR_SIZE(s->intMetas);
+}
+
+void STREAM_getIntMetadataByIndex(
+        const Stream* s,
+        size_t idx,
+        int* mId,
+        int* mValue)
+{
+    ZL_ASSERT_NN(s);
+    ZL_ASSERT_LT(idx, VECTOR_SIZE(s->intMetas));
+    IntMeta const m = VECTOR_DATA(s->intMetas)[idx];
+    *mId            = m.mId;
+    *mValue         = m.mValue;
+}
+
 int STREAM_hasBuffer(const Stream* s)
 {
     return !ZL_Refcount_null(&s->buffer);

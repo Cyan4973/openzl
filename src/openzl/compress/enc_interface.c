@@ -7,15 +7,19 @@
 #include "openzl/common/introspection.h" // WAYPOINT, ZL_CompressIntrospectionHooks
 #include "openzl/common/limits.h"
 #include "openzl/common/operation_context.h"
+#include "openzl/common/stream.h" // STREAM_nbIntMetadata, STREAM_getIntMetadataByIndex
 #include "openzl/compress/cctx.h"   // CCTX_*
 #include "openzl/compress/cgraph.h" // CGRAPH_getDictObj
 #include "openzl/compress/cnode.h"
+#include "openzl/compress/codec_output_cache.h" // ZL_CodecOutputCache, COC_*
 #include "openzl/compress/localparams.h"
 #include "openzl/compress/trStates.h"   // TRS_getState
 #include "openzl/dict/dict_constants.h" // ZL_DICT_INDEX_NONE
+#include "openzl/shared/xxhash.h"       // XXH3_128bits
 #include "openzl/zl_common_types.h"     // ZL_TernaryParam_disable
 #include "openzl/zl_compressor.h"
 #include "openzl/zl_data.h"
+#include "openzl/zl_output.h" // ZL_Output_ptr, ZL_Output_commit, ZL_Output_type
 #include "openzl/zl_version.h"
 
 ZL_Report ENC_initEICtx(
@@ -262,6 +266,221 @@ ZL_Output* ENC_refTypedStream(
             offsetBytes));
 }
 
+// ── codec-output cache helpers ─────────────────────────────────────────────
+
+// Build the cache key for this codec invocation. Returns false (recording the
+// reason) when the invocation must not be cached: dict-backed codecs and
+// codecs reading reference parameters, whose output cannot be proven a pure
+// function of the key. The copy-params blob is serialized into the encoder's
+// scratch arena (valid until ENC_destroyEICtx, i.e. through snapshot/insert).
+static bool ENC_cocBuildKey(
+        ZL_Encoder* eictx,
+        const InternalTransform_Desc* trDesc,
+        const ZL_Data* inStreams[],
+        size_t nbInStreams,
+        ZL_CodecOutputCache* cache,
+        COC_Key* key)
+{
+    if (eictx->cnode != NULL
+        && CNODE_getDictIndex(eictx->cnode) != ZL_DICT_INDEX_NONE) {
+        COC_recordSkip(cache, COC_SKIP_DICT);
+        return false;
+    }
+    const ZL_LocalParams* const lp = eictx->lparams;
+    if (lp != NULL && lp->refParams.nbRefParams != 0) {
+        COC_recordSkip(cache, COC_SKIP_REFPARAM);
+        return false;
+    }
+
+    // 128-bit hash of the concatenated input contents (+ type/width/count).
+    XXH3_state_t hs;
+    XXH3_INITSTATE(&hs);
+    XXH3_128bits_reset(&hs);
+    for (size_t i = 0; i < nbInStreams; i++) {
+        const ZL_Data* const d = inStreams[i];
+        ZL_Type const t        = ZL_Data_type(d);
+        size_t const ew        = ZL_Data_eltWidth(d);
+        size_t const ne        = ZL_Data_numElts(d);
+        size_t const cs        = ZL_Data_contentSize(d);
+        XXH3_128bits_update(&hs, &t, sizeof(t));
+        XXH3_128bits_update(&hs, &ew, sizeof(ew));
+        XXH3_128bits_update(&hs, &ne, sizeof(ne));
+        if (cs != 0) {
+            XXH3_128bits_update(&hs, ZL_Data_rPtr(d), cs);
+        }
+        // Codec output can depend on the input's int-metadata, so it is part
+        // of the key.
+        size_t const nbMeta = STREAM_nbIntMetadata(d);
+        XXH3_128bits_update(&hs, &nbMeta, sizeof(nbMeta));
+        for (size_t m = 0; m < nbMeta; m++) {
+            int mId, mValue;
+            STREAM_getIntMetadataByIndex(d, m, &mId, &mValue);
+            XXH3_128bits_update(&hs, &mId, sizeof(mId));
+            XXH3_128bits_update(&hs, &mValue, sizeof(mValue));
+        }
+    }
+    XXH128_hash_t const h = XXH3_128bits_digest(&hs);
+
+    // Serialize the node's parameters (int params + copy params) into the
+    // scratch arena so the key can be compared by exact content. All param
+    // planes that affect codec output must be included; ref-params make the
+    // node non-cacheable (handled above). The tokenize sort flag, for example,
+    // is an int param -- omitting int params would collide tokenize with
+    // tokenize_sorted.
+    const ZL_LocalIntParams* const ip  = (lp != NULL) ? &lp->intParams : NULL;
+    const ZL_LocalCopyParams* const cp = (lp != NULL) ? &lp->copyParams : NULL;
+    size_t blobSize                    = 0;
+    if (ip != NULL) {
+        blobSize += ip->nbIntParams * (sizeof(int) + sizeof(int));
+    }
+    if (cp != NULL) {
+        for (size_t j = 0; j < cp->nbCopyParams; j++) {
+            blobSize +=
+                    sizeof(int) + sizeof(size_t) + cp->copyParams[j].paramSize;
+        }
+    }
+    void* blob = NULL;
+    if (blobSize != 0) {
+        blob = ALLOC_Arena_malloc(eictx->wkspArena, blobSize);
+        if (blob == NULL) {
+            return false; // cannot build key -> just don't cache
+        }
+        uint8_t* w = (uint8_t*)blob;
+        if (ip != NULL) {
+            for (size_t j = 0; j < ip->nbIntParams; j++) {
+                int const id  = ip->intParams[j].paramId;
+                int const val = ip->intParams[j].paramValue;
+                memcpy(w, &id, sizeof(id));
+                w += sizeof(id);
+                memcpy(w, &val, sizeof(val));
+                w += sizeof(val);
+            }
+        }
+        if (cp != NULL) {
+            for (size_t j = 0; j < cp->nbCopyParams; j++) {
+                int const id     = cp->copyParams[j].paramId;
+                size_t const psz = cp->copyParams[j].paramSize;
+                memcpy(w, &id, sizeof(id));
+                w += sizeof(id);
+                memcpy(w, &psz, sizeof(psz));
+                w += sizeof(psz);
+                if (psz != 0) {
+                    memcpy(w, cp->copyParams[j].paramPtr, psz);
+                    w += psz;
+                }
+            }
+        }
+    }
+
+    memset(key, 0, sizeof(*key));
+    key->contentHashHigh = h.high64;
+    key->contentHashLow  = h.low64;
+    key->codecID         = (uint32_t)trDesc->publicDesc.gd.CTid;
+    key->formatVersion =
+            (uint32_t)ZL_Encoder_getCParam(eictx, ZL_CParam_formatVersion);
+    key->compressionLevel =
+            ZL_Encoder_getCParam(eictx, ZL_CParam_compressionLevel);
+    key->copyParams     = blob;
+    key->copyParamsSize = (uint32_t)blobSize;
+    return true;
+}
+
+// Replay a memoized result into the RTGraph as if the codec had just run:
+// recreate each output stream and its bytes, then re-emit the codec header.
+static ZL_Report ENC_cocReplay(ZL_Encoder* eictx, const COC_Entry* entry)
+{
+    ZL_RESULT_DECLARE_SCOPE_REPORT(eictx);
+    for (size_t i = 0; i < entry->nbOutputs; i++) {
+        const COC_Output* const o = &entry->outputs[i];
+        // Recreate from the codec's original output port (o->outcomeIndex), not
+        // the sequential position: variable-output codecs create every stream
+        // from a single VO port, so using `i` would mistype outputs past it.
+        ZL_Output* const out = ZL_Encoder_createTypedStream(
+                eictx, o->outcomeIndex, o->numElts, o->eltWidth);
+        ZL_ERR_IF_NULL(out, allocation);
+        ZL_ASSERT_EQ((int)ZL_Output_type(out), (int)o->type);
+        if (o->contentSize != 0) {
+            void* const dst = ZL_Output_ptr(out);
+            ZL_ERR_IF_NULL(dst, allocation);
+            memcpy(dst, o->content, o->contentSize);
+        }
+        ZL_ERR_IF_ERR(ZL_Output_commit(out, o->numElts));
+        for (size_t m = 0; m < o->nbIntMetas; m++) {
+            ZL_ERR_IF_ERR(ZL_Output_setIntMetadata(
+                    out, o->intMetas[m].mId, o->intMetas[m].mValue));
+        }
+    }
+    if (entry->hasHeader) {
+        ZL_Encoder_sendCodecHeader(eictx, entry->header, entry->headerSize);
+        ZL_ERR_IF_ERR(eictx->sendTransformHeaderError);
+    }
+    return ZL_returnSuccess();
+}
+
+// Snapshot the outputs (and codec header) just produced by a codec run and
+// store them in the cache. String-typed outputs are not snapshotted (their
+// side metadata is not yet captured); such invocations simply aren't cached.
+static ZL_Report ENC_cocSnapshotInsert(
+        ZL_Encoder* eictx,
+        ZL_CodecOutputCache* cache,
+        const COC_Key* key)
+{
+    ZL_RESULT_DECLARE_SCOPE_REPORT(eictx);
+    ZL_CCtx* const cctx      = eictx->cctx;
+    const RTGraph* const rtg = CCTX_getRTGraph(cctx);
+    size_t const nbOut       = RTGM_getNbOutStreams(rtg, eictx->rtnodeid);
+
+    COC_Output* outs = NULL;
+    if (nbOut != 0) {
+        outs = (COC_Output*)ALLOC_Arena_malloc(
+                eictx->wkspArena, nbOut * sizeof(COC_Output));
+        ZL_ERR_IF_NULL(outs, allocation);
+        for (size_t i = 0; i < nbOut; i++) {
+            RTStreamID const rtsid =
+                    RTGM_getOutStreamID(rtg, eictx->rtnodeid, (int)i);
+            const ZL_Data* const d = RTGM_getRStream(rtg, rtsid);
+            ZL_Type const t        = ZL_Data_type(d);
+            if (t == ZL_Type_string) {
+                COC_recordSkip(cache, COC_SKIP_OTHER);
+                return ZL_returnSuccess(); // run succeeded; just not cached
+            }
+            outs[i].type = t;
+            outs[i].outcomeIndex =
+                    (int)RTGM_getOutcomeID_fromRtstream(rtg, rtsid);
+            outs[i].eltWidth    = ZL_Data_eltWidth(d);
+            outs[i].numElts     = ZL_Data_numElts(d);
+            outs[i].contentSize = ZL_Data_contentSize(d);
+            outs[i].content     = ZL_Data_rPtr(d);
+            size_t const nbMeta = STREAM_nbIntMetadata(d);
+            outs[i].nbIntMetas  = nbMeta;
+            if (nbMeta != 0) {
+                COC_IntMeta* meta = (COC_IntMeta*)ALLOC_Arena_malloc(
+                        eictx->wkspArena, nbMeta * sizeof(COC_IntMeta));
+                ZL_ERR_IF_NULL(meta, allocation);
+                for (size_t m = 0; m < nbMeta; m++) {
+                    STREAM_getIntMetadataByIndex(
+                            d, m, &meta[m].mId, &meta[m].mValue);
+                }
+                outs[i].intMetas = meta;
+            } else {
+                outs[i].intMetas = NULL;
+            }
+        }
+    }
+
+    COC_Entry entry;
+    memset(&entry, 0, sizeof(entry));
+    entry.nbOutputs = nbOut;
+    entry.outputs   = outs;
+    if (eictx->hasSentTrHeader) {
+        ZL_RBuffer const hdr = CCTX_getNodeHeader(cctx, eictx->rtnodeid);
+        entry.hasHeader      = true;
+        entry.header         = hdr.start;
+        entry.headerSize     = hdr.size;
+    }
+    return COC_insert(cache, key, &entry);
+}
+
 static ZL_Report ENC_runTransform_internal(
         ZL_Encoder* eictx,
         ZL_NodeID nodeid,
@@ -283,24 +502,46 @@ static ZL_Report ENC_runTransform_internal(
     eictx->opaquePtr                = trDesc->publicDesc.opaque.ptr;
     eictx->sendTransformHeaderError = ZL_returnSuccess();
 
-    // Run transform
-    ZL_ASSERT_NN(trDesc->publicDesc.transform_f);
-    IF_CWAYPOINT_ENABLED(on_codecEncode_start, eictx)
-    {
-        CWAYPOINT(
-                on_codecEncode_start,
-                eictx,
-                CCTX_getCGraph(eictx->cctx),
-                nodeid,
-                ZL_codemodDatasAsInputs(inStreams),
-                nbInStreams);
+    // Codec-output cache: replay a memoized result on a hit, otherwise run the
+    // codec normally and snapshot its result below.
+    ZL_CodecOutputCache* const coc = CCTX_getCodecOutputCache(eictx->cctx);
+    COC_Key cocKey;
+    bool cocCacheable = false;
+    bool cocHit       = false;
+    if (coc != NULL) {
+        cocCacheable = ENC_cocBuildKey(
+                eictx, trDesc, inStreams, nbInStreams, coc, &cocKey);
+        if (cocCacheable) {
+            const COC_Entry* const cached = COC_find(coc, &cocKey);
+            if (cached != NULL) {
+                ZL_ERR_IF_ERR(ENC_cocReplay(eictx, cached));
+                cocHit = true;
+            }
+        }
     }
-    ZL_Report codecExecResult = (trDesc->publicDesc.transform_f(
-            eictx, ZL_codemodDatasAsInputs(inStreams), nbInStreams));
-    if (ZL_isError(codecExecResult)) {
-        CWAYPOINT(on_codecEncode_end, eictx, NULL, 0, codecExecResult);
-        ZL_ERR_IF_ERR_COERCE(
-                codecExecResult, "transform %s failed", CT_getTrName(trDesc));
+
+    if (!cocHit) {
+        // Run transform
+        ZL_ASSERT_NN(trDesc->publicDesc.transform_f);
+        IF_CWAYPOINT_ENABLED(on_codecEncode_start, eictx)
+        {
+            CWAYPOINT(
+                    on_codecEncode_start,
+                    eictx,
+                    CCTX_getCGraph(eictx->cctx),
+                    nodeid,
+                    ZL_codemodDatasAsInputs(inStreams),
+                    nbInStreams);
+        }
+        ZL_Report codecExecResult = (trDesc->publicDesc.transform_f(
+                eictx, ZL_codemodDatasAsInputs(inStreams), nbInStreams));
+        if (ZL_isError(codecExecResult)) {
+            CWAYPOINT(on_codecEncode_end, eictx, NULL, 0, codecExecResult);
+            ZL_ERR_IF_ERR_COERCE(
+                    codecExecResult,
+                    "transform %s failed",
+                    CT_getTrName(trDesc));
+        }
     }
     const RTGraph* rtgm       = CCTX_getRTGraph(eictx->cctx);
     const size_t nbOutStreams = RTGM_getNbOutStreams(rtgm, eictx->rtnodeid);
@@ -356,6 +597,10 @@ static ZL_Report ENC_runTransform_internal(
             nbOutStreams,
             ZL_transformOutStreamsLimit(formatVersion),
             formatVersion_unsupported);
+
+    if (cocCacheable && !cocHit) {
+        ZL_ERR_IF_ERR(ENC_cocSnapshotInsert(eictx, coc, &cocKey));
+    }
 
     return ZL_returnValue(nbOutStreams);
 }
