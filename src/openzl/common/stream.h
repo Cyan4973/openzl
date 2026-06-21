@@ -300,6 +300,14 @@ ZL_Report STREAM_consume(Stream* data, size_t numElts);
  * count. */
 void STREAM_clear(Stream* s);
 
+/* Codec-output cache: memoize/read a stream's 128-bit content-key hash so a
+ * consumer can skip re-hashing identical content. STREAM_setKeyHash must only
+ * be called on a final, immutable stream (its value is the hash of the current
+ * content+metadata); it is invalidated by STREAM_clear / STREAM_setIntMetadata.
+ * STREAM_getKeyHash returns false when no valid hash is memoized. */
+void STREAM_setKeyHash(Stream* s, uint64_t high, uint64_t low);
+bool STREAM_getKeyHash(const Stream* s, uint64_t* high, uint64_t* low);
+
 ZL_END_C_DECLS
 
 #endif /* ZSTRONG_COMMON_STREAM_H */

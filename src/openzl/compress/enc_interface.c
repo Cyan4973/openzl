@@ -268,6 +268,39 @@ ZL_Output* ENC_refTypedStream(
 
 // ── codec-output cache helpers ─────────────────────────────────────────────
 
+// Per-input contribution to the codec-output cache key: a 128-bit hash of one
+// stream's (type, eltWidth, numElts, content, int-metadata). For a single-input
+// codec this IS the key's content hash, so a producer can memoize it and a
+// consumer can reuse it (STREAM_get/setKeyHash) instead of re-hashing identical
+// bytes on every cache probe.
+static XXH128_hash_t ENC_hashStreamForKey(const ZL_Data* d)
+{
+    XXH3_state_t hs;
+    XXH3_INITSTATE(&hs);
+    XXH3_128bits_reset(&hs);
+    ZL_Type const t = ZL_Data_type(d);
+    size_t const ew = ZL_Data_eltWidth(d);
+    size_t const ne = ZL_Data_numElts(d);
+    size_t const cs = ZL_Data_contentSize(d);
+    XXH3_128bits_update(&hs, &t, sizeof(t));
+    XXH3_128bits_update(&hs, &ew, sizeof(ew));
+    XXH3_128bits_update(&hs, &ne, sizeof(ne));
+    if (cs != 0) {
+        XXH3_128bits_update(&hs, ZL_Data_rPtr(d), cs);
+    }
+    // Codec output can depend on the input's int-metadata, so it is part of
+    // the key.
+    size_t const nbMeta = STREAM_nbIntMetadata(d);
+    XXH3_128bits_update(&hs, &nbMeta, sizeof(nbMeta));
+    for (size_t m = 0; m < nbMeta; m++) {
+        int mId, mValue;
+        STREAM_getIntMetadataByIndex(d, m, &mId, &mValue);
+        XXH3_128bits_update(&hs, &mId, sizeof(mId));
+        XXH3_128bits_update(&hs, &mValue, sizeof(mValue));
+    }
+    return XXH3_128bits_digest(&hs);
+}
+
 // Build the cache key for this codec invocation. Returns false (recording the
 // reason) when the invocation must not be cached: dict-backed codecs and
 // codecs reading reference parameters, whose output cannot be proven a pure
@@ -293,33 +326,50 @@ static bool ENC_cocBuildKey(
     }
 
     // 128-bit hash of the concatenated input contents (+ type/width/count).
-    XXH3_state_t hs;
-    XXH3_INITSTATE(&hs);
-    XXH3_128bits_reset(&hs);
-    for (size_t i = 0; i < nbInStreams; i++) {
-        const ZL_Data* const d = inStreams[i];
-        ZL_Type const t        = ZL_Data_type(d);
-        size_t const ew        = ZL_Data_eltWidth(d);
-        size_t const ne        = ZL_Data_numElts(d);
-        size_t const cs        = ZL_Data_contentSize(d);
-        XXH3_128bits_update(&hs, &t, sizeof(t));
-        XXH3_128bits_update(&hs, &ew, sizeof(ew));
-        XXH3_128bits_update(&hs, &ne, sizeof(ne));
-        if (cs != 0) {
-            XXH3_128bits_update(&hs, ZL_Data_rPtr(d), cs);
+    // Fast path: a single-input codec's content hash is exactly one stream's
+    // per-input hash (ENC_hashStreamForKey). If the producer already memoized
+    // it (a cache replay, or a stream stamped earlier), reuse it instead of
+    // re-hashing identical bytes -- the dominant cost on cache-hit-heavy
+    // sweeps.
+    XXH128_hash_t h;
+    uint64_t stampedHigh, stampedLow;
+    if (nbInStreams == 1
+        && STREAM_getKeyHash(inStreams[0], &stampedHigh, &stampedLow)) {
+        h.high64 = stampedHigh;
+        h.low64  = stampedLow;
+    } else if (nbInStreams == 1) {
+        h = ENC_hashStreamForKey(inStreams[0]);
+    } else {
+        // Multi-input: hash all inputs into one state (not reconstructable from
+        // per-stream memos, so no fast path). Byte-identical to the original.
+        XXH3_state_t hs;
+        XXH3_INITSTATE(&hs);
+        XXH3_128bits_reset(&hs);
+        for (size_t i = 0; i < nbInStreams; i++) {
+            const ZL_Data* const d = inStreams[i];
+            ZL_Type const t        = ZL_Data_type(d);
+            size_t const ew        = ZL_Data_eltWidth(d);
+            size_t const ne        = ZL_Data_numElts(d);
+            size_t const cs        = ZL_Data_contentSize(d);
+            XXH3_128bits_update(&hs, &t, sizeof(t));
+            XXH3_128bits_update(&hs, &ew, sizeof(ew));
+            XXH3_128bits_update(&hs, &ne, sizeof(ne));
+            if (cs != 0) {
+                XXH3_128bits_update(&hs, ZL_Data_rPtr(d), cs);
+            }
+            // Codec output can depend on the input's int-metadata, so it is
+            // part of the key.
+            size_t const nbMeta = STREAM_nbIntMetadata(d);
+            XXH3_128bits_update(&hs, &nbMeta, sizeof(nbMeta));
+            for (size_t m = 0; m < nbMeta; m++) {
+                int mId, mValue;
+                STREAM_getIntMetadataByIndex(d, m, &mId, &mValue);
+                XXH3_128bits_update(&hs, &mId, sizeof(mId));
+                XXH3_128bits_update(&hs, &mValue, sizeof(mValue));
+            }
         }
-        // Codec output can depend on the input's int-metadata, so it is part
-        // of the key.
-        size_t const nbMeta = STREAM_nbIntMetadata(d);
-        XXH3_128bits_update(&hs, &nbMeta, sizeof(nbMeta));
-        for (size_t m = 0; m < nbMeta; m++) {
-            int mId, mValue;
-            STREAM_getIntMetadataByIndex(d, m, &mId, &mValue);
-            XXH3_128bits_update(&hs, &mId, sizeof(mId));
-            XXH3_128bits_update(&hs, &mValue, sizeof(mValue));
-        }
+        h = XXH3_128bits_digest(&hs);
     }
-    XXH128_hash_t const h = XXH3_128bits_digest(&hs);
 
     // Serialize the node's parameters (int params + copy params) into the
     // scratch arena so the key can be compared by exact content. All param
@@ -438,6 +488,12 @@ static ZL_Report ENC_cocReplay(ZL_Encoder* eictx, const COC_Entry* entry)
             ZL_ERR_IF_ERR(ZL_Output_setIntMetadata(
                     out, o->intMetas[m].mId, o->intMetas[m].mValue));
         }
+        // Stamp the replayed stream with the producer's memoized content-key
+        // hash (after metadata, which invalidates it) so the consuming codec
+        // keys off it instead of re-hashing the replayed content. The replayed
+        // content+metadata match exactly what produced this hash at snapshot.
+        STREAM_setKeyHash(
+                ZL_codemodOutputAsData(out), o->keyHashHigh, o->keyHashLow);
     }
     if (entry->hasHeader) {
         ZL_Encoder_sendCodecHeader(eictx, entry->header, entry->headerSize);
@@ -494,6 +550,12 @@ static ZL_Report ENC_cocSnapshotInsert(
             } else {
                 outs[i].intMetas = NULL;
             }
+            // Memoize this output's content-key hash so a future consumer that
+            // replays it can key off it without re-hashing (see
+            // ENC_cocBuildKey).
+            XXH128_hash_t const oh = ENC_hashStreamForKey(d);
+            outs[i].keyHashHigh    = oh.high64;
+            outs[i].keyHashLow     = oh.low64;
         }
     }
 

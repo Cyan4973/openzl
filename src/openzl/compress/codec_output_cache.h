@@ -54,6 +54,12 @@ typedef struct {
     const void* content;         // cache-arena-owned once stored
     const COC_IntMeta* intMetas; // cache-arena-owned once stored (or NULL)
     size_t nbIntMetas;
+    // 128-bit content-key hash of this output viewed as a downstream input (the
+    // value ENC_hashStreamForKey computes). Stored so a consumer replaying this
+    // output can key off it without re-hashing the content. Copied by value in
+    // COC_insert along with the rest of the struct.
+    uint64_t keyHashHigh;
+    uint64_t keyHashLow;
 } COC_Output;
 
 /** The memoized result of a single codec invocation. */

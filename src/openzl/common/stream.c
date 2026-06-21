@@ -36,6 +36,13 @@ struct Stream_s { // exposed publicly as ZL_Data
     size_t lastCommmited;     // tracks the eltCount of most recent commit
     VECTOR(IntMeta) intMetas; // Metadata (arbitrary ID+Ints)
     Arena* alloc;
+    // Codec-output cache: a memoized 128-bit content-key hash of this stream
+    // (the value ENC_hashStreamForKey would compute). Valid only when
+    // hasKeyHash. Set on final, immutable streams so a consumer can skip
+    // re-hashing identical content; cleared on any content/metadata change.
+    bool hasKeyHash;
+    uint64_t keyHashHigh;
+    uint64_t keyHashLow;
 };
 
 struct ZL_Input_s {
@@ -881,6 +888,27 @@ void STREAM_clear(Stream* s)
     s->eltCount       = 0;
     s->lastCommmited  = 0;
     s->bufferUsed     = 0;
+    s->hasKeyHash =
+            false; // content is being reused; any memoized hash is stale
+}
+
+void STREAM_setKeyHash(Stream* s, uint64_t high, uint64_t low)
+{
+    ZL_ASSERT_NN(s);
+    s->keyHashHigh = high;
+    s->keyHashLow  = low;
+    s->hasKeyHash  = true;
+}
+
+bool STREAM_getKeyHash(const Stream* s, uint64_t* high, uint64_t* low)
+{
+    ZL_ASSERT_NN(s);
+    if (!s->hasKeyHash) {
+        return false;
+    }
+    *high = s->keyHashHigh;
+    *low  = s->keyHashLow;
+    return true;
 }
 
 /* Only works for elts of fixed width */
@@ -1086,6 +1114,8 @@ ZL_Report STREAM_setIntMetadata(Stream* s, int mId, int mValue)
 {
     ZL_RESULT_DECLARE_SCOPE_REPORT(NULL);
     ZL_ASSERT_NN(s);
+    s->hasKeyHash =
+            false; // int-metadata is part of the key; invalidate the memo
     // Currently forbids setting same metadata ID multiple times
     ZL_ERR_IF_NE(
             findIntMeta(s->intMetas, mId),
