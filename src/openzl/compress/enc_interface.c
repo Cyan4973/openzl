@@ -395,16 +395,45 @@ static ZL_Report ENC_cocReplay(ZL_Encoder* eictx, const COC_Entry* entry)
         // Recreate from the codec's original output port (o->outcomeIndex), not
         // the sequential position: variable-output codecs create every stream
         // from a single VO port, so using `i` would mistype outputs past it.
-        ZL_Output* const out = ZL_Encoder_createTypedStream(
-                eictx, o->outcomeIndex, o->numElts, o->eltWidth);
-        ZL_ERR_IF_NULL(out, allocation);
-        ZL_ASSERT_EQ((int)ZL_Output_type(out), (int)o->type);
+        ZL_Output* out;
         if (o->contentSize != 0) {
-            void* const dst = ZL_Output_ptr(out);
-            ZL_ERR_IF_NULL(dst, allocation);
-            memcpy(dst, o->content, o->contentSize);
+            // Replay by REFERENCE: point the output stream at the cache-owned
+            // blob instead of allocating a fresh buffer and memcpy'ing into it.
+            // The blob is immutable and outlives this compression -- the cache
+            // is only reset between files / top branches, never mid-compress --
+            // and downstream codecs read their inputs read-only, so a const
+            // reference produces a byte-identical frame while skipping the
+            // per-graph copy that dominates replay cost. The cache HeapArena
+            // returns 16-byte-aligned blobs, satisfying the numeric-stream
+            // alignment requirement of STREAM_refConstBuffer.
+            Stream* const wrap =
+                    STREAM_createInArena(eictx->wkspArena, (ZL_DataID){ 0 });
+            ZL_ERR_IF_NULL(wrap, allocation);
+            ZL_ERR_IF_ERR(STREAM_refConstBuffer(
+                    wrap, o->content, o->type, o->eltWidth, o->numElts));
+            // CCTX_refContentIntoNewStream references wrap's buffer (the cache
+            // blob) into a fresh RTGraph output stream and commits it; the
+            // throwaway `wrap` is no longer needed afterwards (the new stream
+            // aliases the raw pointer, not wrap), and is freed with wkspArena.
+            out = ZL_codemodDataAsOutput(CCTX_refContentIntoNewStream(
+                    eictx->cctx,
+                    eictx->rtnodeid,
+                    o->outcomeIndex,
+                    o->eltWidth,
+                    o->numElts,
+                    wrap,
+                    0));
+            ZL_ERR_IF_NULL(out, allocation);
+            // Already committed by the reference path -- do NOT commit again.
+        } else {
+            // Empty output: nothing to reference; allocate a zero-length
+            // stream.
+            out = ZL_Encoder_createTypedStream(
+                    eictx, o->outcomeIndex, o->numElts, o->eltWidth);
+            ZL_ERR_IF_NULL(out, allocation);
+            ZL_ERR_IF_ERR(ZL_Output_commit(out, o->numElts));
         }
-        ZL_ERR_IF_ERR(ZL_Output_commit(out, o->numElts));
+        ZL_ASSERT_EQ((int)ZL_Output_type(out), (int)o->type);
         for (size_t m = 0; m < o->nbIntMetas; m++) {
             ZL_ERR_IF_ERR(ZL_Output_setIntMetadata(
                     out, o->intMetas[m].mId, o->intMetas[m].mValue));
