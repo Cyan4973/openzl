@@ -32,6 +32,10 @@
 
 namespace zstrong::bench::e2e {
 
+namespace codec_output_cache {
+void registerBenchmarks();
+}
+
 void E2EBenchmarkTestcase::registerBenchmarks()
 {
     auto CompressBM = [compressor = _compressor,
@@ -619,6 +623,7 @@ void registerE2EBenchmarks()
     json_extract::registerBenchmarks();
     parse::registerBenchmarks();
     ml_selector::registerMLSelectorBenchmarks();
+    codec_output_cache::registerBenchmarks();
 }
 
 } // namespace zstrong::bench::e2e
