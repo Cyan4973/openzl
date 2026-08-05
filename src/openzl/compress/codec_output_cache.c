@@ -322,19 +322,31 @@ static bool CodecCache_getStandardNodeID(
  */
 static bool CodecCache_buildKey(
         CodecCache_Key* key,
+        ZL_CodecOutputCache* cache,
         ZL_Encoder* encoder,
         ZL_NodeID node,
         const ZL_Data* input)
 {
     ZL_IDType standardNodeID;
-    if (!CodecCache_getStandardNodeID(&standardNodeID, encoder, node)
-        || CNODE_getDictIndex(encoder->cnode) != ZL_DICT_INDEX_NONE
-        || CNODE_getMParamObj(encoder->cnode) != NULL
-        || (encoder->lparams != NULL
-            && encoder->lparams->refParams.nbRefParams != 0)) {
+    if (!CodecCache_getStandardNodeID(&standardNodeID, encoder, node)) {
+        CodecCache_recordSkip(cache, CodecCache_SkipReason_customCodec);
+        return false;
+    }
+    if (CNODE_getDictIndex(encoder->cnode) != ZL_DICT_INDEX_NONE) {
+        CodecCache_recordSkip(cache, CodecCache_SkipReason_dict);
+        return false;
+    }
+    if (CNODE_getMParamObj(encoder->cnode) != NULL) {
+        CodecCache_recordSkip(cache, CodecCache_SkipReason_mparam);
+        return false;
+    }
+    if (encoder->lparams != NULL
+        && encoder->lparams->refParams.nbRefParams != 0) {
+        CodecCache_recordSkip(cache, CodecCache_SkipReason_refParam);
         return false;
     }
     if (ZL_Data_type(input) == ZL_Type_string) {
+        CodecCache_recordSkip(cache, CodecCache_SkipReason_string);
         return false;
     }
 
@@ -434,6 +446,53 @@ CodecCache_Stats CodecCache_getStats(const ZL_CodecOutputCache* cache)
     return stats;
 }
 
+void CodecCache_recordSkip(
+        ZL_CodecOutputCache* cache,
+        CodecCache_SkipReason reason)
+{
+    ZL_ASSERT_NN(cache);
+    switch (reason) {
+        case CodecCache_SkipReason_customCodec:
+            ++cache->stats.customCodecSkips;
+            break;
+        case CodecCache_SkipReason_refParam:
+            ++cache->stats.refParamSkips;
+            break;
+        case CodecCache_SkipReason_dict:
+            ++cache->stats.dictSkips;
+            break;
+        case CodecCache_SkipReason_mparam:
+            ++cache->stats.mparamSkips;
+            break;
+        case CodecCache_SkipReason_string:
+            ++cache->stats.stringSkips;
+            break;
+        case CodecCache_SkipReason_nonSingleInput:
+            ++cache->stats.nonSingleInputSkips;
+            break;
+    }
+}
+
+ZL_CodecOutputCache* ZL_CodecOutputCache_create(void)
+{
+    return CodecCache_createDefault();
+}
+
+ZL_CodecOutputCache* ZL_CodecOutputCache_createWithBudget(size_t maxBytes)
+{
+    return CodecCache_create(maxBytes);
+}
+
+void ZL_CodecOutputCache_free(ZL_CodecOutputCache* cache)
+{
+    CodecCache_free(cache);
+}
+
+void ZL_CodecOutputCache_reset(ZL_CodecOutputCache* cache)
+{
+    CodecCache_reset(cache);
+}
+
 CodecCache_Lookup* CodecCache_lookup(
         ZL_CodecOutputCache* cache,
         ZL_Encoder* encoder,
@@ -445,7 +504,7 @@ CodecCache_Lookup* CodecCache_lookup(
     CodecCache_Lookup* const lookup =
             ALLOC_Arena_malloc(encoder->wkspArena, sizeof(*lookup));
     if (lookup == NULL
-        || !CodecCache_buildKey(&lookup->key, encoder, node, input)) {
+        || !CodecCache_buildKey(&lookup->key, cache, encoder, node, input)) {
         return NULL;
     }
     lookup->cache = cache;
@@ -646,6 +705,13 @@ CodecCache_InsertResult CodecCache_store(
     ZL_ASSERT_NN(result);
     ZL_CodecOutputCache* const cache = lookup->cache;
     const CodecCache_Key* const key  = &lookup->key;
+
+    for (size_t i = 0; i < result->nbOutputs; ++i) {
+        if (result->outputs[i].type == ZL_Type_string) {
+            CodecCache_recordSkip(cache, CodecCache_SkipReason_string);
+            return CodecCache_InsertResult_notCacheable;
+        }
+    }
 
     if (CodecCache_Map_find(&cache->map, key) != NULL) {
         if (cache->statsEnabled) {

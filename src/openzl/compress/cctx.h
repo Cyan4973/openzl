@@ -6,6 +6,7 @@
 #include "openzl/compress/encode_frameheader.h" // EFH_FrameInfo, GraphInfo
 #include "openzl/compress/rtgraphs.h"           // RTNodeID
 #include "openzl/shared/portability.h"
+#include "openzl/zl_codec_output_cache.h"
 #include "openzl/zl_compress.h" // ZL_CCtx, ZL_GraphFn, ZL_Report
 
 ZL_BEGIN_C_DECLS
@@ -233,6 +234,12 @@ unsigned CCTX_getSegmenterDepth(const ZL_CCtx* cctx);
  * @see RTNodeID for runtime node identification
  */
 ZL_Report CCTX_sendTrHeader(ZL_CCtx* cctx, RTNodeID rtnodeid, ZL_RBuffer trh);
+
+/** Returns the transform header staged for @p rtnodeid, or an empty buffer. */
+ZL_RBuffer CCTX_getNodeHeader(const ZL_CCtx* cctx, RTNodeID rtnodeid);
+
+/** Returns the borrowed codec output cache attached to @p cctx, if any. */
+ZL_CodecOutputCache* CCTX_getCodecOutputCache(const ZL_CCtx* cctx);
 
 /**
  * @brief Start the compression process with the provided input data.

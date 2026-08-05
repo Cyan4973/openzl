@@ -2,7 +2,10 @@
 
 #include <array>
 #include <cstring>
+#include <limits>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -15,8 +18,10 @@
 #include "openzl/compress/codec_output_cache.h"
 #include "openzl/compress/enc_interface.h"
 #include "openzl/compress/private_nodes.h"
+#include "openzl/zl_codec_output_cache.h"
 #include "openzl/zl_compress.h"
 #include "openzl/zl_compressor.h"
+#include "openzl/zl_public_nodes.h"
 #include "openzl/zl_version.h"
 
 namespace {
@@ -334,6 +339,7 @@ TEST_F(CodecOutputCacheTest, ReferenceParamsAreNotCacheable)
             lookupWithParams(
                     cache.get(), ZL_NODE_SPARSE_NUM, input, &localParams),
             nullptr);
+    EXPECT_EQ(CodecCache_getStats(cache.get()).refParamSkips, 1);
 }
 
 TEST_F(CodecOutputCacheTest, CustomCodecIsNotCacheable)
@@ -360,6 +366,7 @@ TEST_F(CodecOutputCacheTest, CustomCodecIsNotCacheable)
     const Stream* const input = makeInput("input", 5);
     ASSERT_NE(input, nullptr);
     EXPECT_EQ(lookup(cache.get(), customNode, input), nullptr);
+    EXPECT_EQ(CodecCache_getStats(cache.get()).customCodecSkips, 1);
 }
 
 TEST_F(CodecOutputCacheTest, DifferentLocalParamPlanesDoNotShareResult)
@@ -585,6 +592,32 @@ TEST_F(CodecOutputCacheTest, BudgetExhaustionSkipsStore)
     EXPECT_EQ(stats.bytesStored, 0);
 }
 
+TEST_F(CodecOutputCacheTest, StringOutputIsNotCacheable)
+{
+    Cache cache;
+    const Stream* const input = makeInput("input", 5);
+    ASSERT_NE(input, nullptr);
+    CodecCache_Lookup* const miss =
+            lookup(cache.get(), ZL_NODE_SPARSE_NUM, input);
+    ASSERT_NE(miss, nullptr);
+    CodecCache_Output output       = makeOutput("output", 6);
+    output.type                    = ZL_Type_string;
+    const CodecCache_Result result = makeResult(&output, 1);
+
+    EXPECT_EQ(
+            CodecCache_store(miss, &result),
+            CodecCache_InsertResult_notCacheable);
+    const CodecCache_Stats stats = CodecCache_getStats(cache.get());
+    EXPECT_EQ(stats.stringSkips, 1);
+    EXPECT_EQ(stats.inserts, 0);
+    EXPECT_EQ(stats.bytesStored, 0);
+
+    CodecCache_Lookup* const afterStore =
+            lookup(cache.get(), ZL_NODE_SPARSE_NUM, input);
+    ASSERT_NE(afterStore, nullptr);
+    EXPECT_EQ(CodecCache_Lookup_getResult(afterStore), nullptr);
+}
+
 TEST_F(CodecOutputCacheTest, ResetDropsEntriesAndCounters)
 {
     Cache cache;
@@ -636,6 +669,98 @@ TEST(CodecOutputCacheLifecycleTest, NullOperationsAreSafe)
 {
     CodecCache_free(nullptr);
     CodecCache_reset(nullptr);
+}
+
+TEST(CodecOutputCacheIntegrationTest,
+     AttachedCacheReplaysByteIdenticalCodecOutput)
+{
+    ZL_Compressor* const compressor = ZL_Compressor_create();
+    ASSERT_NE(compressor, nullptr);
+    ASSERT_FALSE(ZL_isError(
+            ZL_Compressor_selectStartingGraphID(compressor, ZL_GRAPH_ZSTD)));
+    ZL_CCtx* const cctx = ZL_CCtx_create();
+    ASSERT_NE(cctx, nullptr);
+    ASSERT_FALSE(ZL_isError(ZL_CCtx_refCompressor(cctx, compressor)));
+    ASSERT_FALSE(ZL_isError(ZL_CCtx_setParameter(
+            cctx, ZL_CParam_formatVersion, ZL_MAX_FORMAT_VERSION)));
+    ASSERT_FALSE(ZL_isError(
+            ZL_CCtx_setParameter(cctx, ZL_CParam_stickyParameters, 1)));
+    ZL_CodecOutputCache* const cache = ZL_CodecOutputCache_create();
+    ASSERT_NE(cache, nullptr);
+    CodecCache_setStatsEnabled(cache, true);
+    ASSERT_FALSE(ZL_isError(ZL_CCtx_setCodecOutputCache(cctx, cache)));
+
+    const std::string input(64 * 1024, 'a');
+    std::vector<char> first(ZL_compressBound(input.size()));
+    std::vector<char> second(first.size());
+    const ZL_Report firstResult = ZL_CCtx_compress(
+            cctx, first.data(), first.size(), input.data(), input.size());
+    ASSERT_FALSE(ZL_isError(firstResult));
+    const CodecCache_Stats afterFirst = CodecCache_getStats(cache);
+    EXPECT_GT(afterFirst.misses, 0);
+    EXPECT_GT(afterFirst.inserts, 0);
+
+    const ZL_Report secondResult = ZL_CCtx_compress(
+            cctx, second.data(), second.size(), input.data(), input.size());
+    ASSERT_FALSE(ZL_isError(secondResult));
+    ASSERT_EQ(ZL_validResult(firstResult), ZL_validResult(secondResult));
+    EXPECT_EQ(
+            std::memcmp(
+                    first.data(), second.data(), ZL_validResult(firstResult)),
+            0);
+    const CodecCache_Stats afterSecond = CodecCache_getStats(cache);
+    EXPECT_GT(afterSecond.hits, afterFirst.hits);
+
+    ZL_CCtx_free(cctx);
+    ZL_CodecOutputCache_free(cache);
+    ZL_Compressor_free(compressor);
+}
+
+TEST(CodecOutputCacheIntegrationTest, MultiInputCodecBypassesCache)
+{
+    ZL_Compressor* const compressor = ZL_Compressor_create();
+    ASSERT_NE(compressor, nullptr);
+    const ZL_GraphID successors[] = { ZL_GRAPH_STORE, ZL_GRAPH_STORE };
+    const ZL_GraphID graph        = ZL_Compressor_registerStaticGraph_fromNode(
+            compressor, ZL_NODE_CONCAT_SERIAL, successors, 2);
+    ASSERT_TRUE(ZL_GraphID_isValid(graph));
+    ASSERT_FALSE(
+            ZL_isError(ZL_Compressor_selectStartingGraphID(compressor, graph)));
+
+    ZL_CCtx* const cctx = ZL_CCtx_create();
+    ASSERT_NE(cctx, nullptr);
+    ASSERT_FALSE(ZL_isError(ZL_CCtx_refCompressor(cctx, compressor)));
+    ASSERT_FALSE(ZL_isError(ZL_CCtx_setParameter(
+            cctx, ZL_CParam_formatVersion, ZL_MAX_FORMAT_VERSION)));
+    ZL_CodecOutputCache* const cache =
+            ZL_CodecOutputCache_createWithBudget(1 << 20);
+    ASSERT_NE(cache, nullptr);
+    CodecCache_setStatsEnabled(cache, true);
+    ASSERT_FALSE(ZL_isError(ZL_CCtx_setCodecOutputCache(cctx, cache)));
+
+    const std::string firstData(1024, 'a');
+    const std::string secondData(1024, 'b');
+    ZL_TypedRef* const first =
+            ZL_TypedRef_createSerial(firstData.data(), firstData.size());
+    ZL_TypedRef* const second =
+            ZL_TypedRef_createSerial(secondData.data(), secondData.size());
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    const ZL_TypedRef* inputs[] = { first, second };
+    std::vector<char> compressed(
+            2 * ZL_compressBound(firstData.size() + secondData.size()));
+    const ZL_Report result = ZL_CCtx_compressMultiTypedRef(
+            cctx, compressed.data(), compressed.size(), inputs, 2);
+    ASSERT_FALSE(ZL_isError(result));
+
+    const CodecCache_Stats stats = CodecCache_getStats(cache);
+    EXPECT_EQ(stats.nonSingleInputSkips, 1);
+
+    ZL_TypedRef_free(second);
+    ZL_TypedRef_free(first);
+    ZL_CCtx_free(cctx);
+    ZL_CodecOutputCache_free(cache);
+    ZL_Compressor_free(compressor);
 }
 
 } // namespace
