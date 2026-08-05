@@ -16,6 +16,7 @@
 #include "openzl/compress/cctx.h"               // ZS2_CCtx_*
 #include "openzl/compress/cgraph.h"             // CGRAPH_*
 #include "openzl/compress/cnode.h"              // CNODE_*
+#include "openzl/compress/codec_output_cache.h" // ZL_CodecOutputCache
 #include "openzl/compress/dyngraph_interface.h" // GCtx
 #include "openzl/compress/enc_interface.h"      // ENC_*
 #include "openzl/compress/gcparams.h"           // GCParams
@@ -129,10 +130,11 @@ struct ZL_CCtx_s {
     const ZL_Compressor* cgraph;
     ZL_Compressor* internal_cgraph;
     RTGraph rtgraph;
-    CachedStates cachedCodecStates; // @note valid for single-thread only
-    GCParams requestedGCParams;     // User selection, at CCtx level
-    GCParams appliedGCParams;       // Employed at compression time;
-                                    // CCtx > Compressor > default
+    CachedStates cachedCodecStates;        // @note valid for single-thread only
+    ZL_CodecOutputCache* codecOutputCache; // borrowed; NULL means disabled
+    GCParams requestedGCParams;            // User selection, at CCtx level
+    GCParams appliedGCParams;              // Employed at compression time;
+                                           // CCtx > Compressor > default
     /// Comment to be added to the header. Is not added when size is 0.
     ZL_Comment comment;
     CCTX_TransformHeaders trHeaders;
@@ -416,6 +418,33 @@ ZL_Report CCTX_sendTrHeader(ZL_CCtx* cctx, RTNodeID rtnodeid, ZL_RBuffer trh)
             &cctx->rtgraph,
             rtnodeid,
             (NodeHeaderSegment){ headerPos, trh.size });
+    return ZL_returnSuccess();
+}
+
+ZL_RBuffer CCTX_getNodeHeader(const ZL_CCtx* cctx, RTNodeID rtnodeid)
+{
+    ZL_ASSERT_NN(cctx);
+    const NodeHeaderSegment segment =
+            RTGM_nodeHeaderSegment(&cctx->rtgraph, rtnodeid);
+    if (segment.len == 0) {
+        return (ZL_RBuffer){ NULL, 0 };
+    }
+    const uint8_t* const headers =
+            VECTOR_DATA(cctx->trHeaders.stagingHeaderStream);
+    ZL_ASSERT_NN(headers);
+    return (ZL_RBuffer){ headers + segment.startPos, segment.len };
+}
+
+ZL_CodecOutputCache* CCTX_getCodecOutputCache(const ZL_CCtx* cctx)
+{
+    ZL_ASSERT_NN(cctx);
+    return cctx->codecOutputCache;
+}
+
+ZL_Report ZL_CCtx_setCodecOutputCache(ZL_CCtx* cctx, ZL_CodecOutputCache* cache)
+{
+    ZL_ASSERT_NN(cctx);
+    cctx->codecOutputCache = cache;
     return ZL_returnSuccess();
 }
 
