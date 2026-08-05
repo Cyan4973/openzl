@@ -23,6 +23,20 @@ DECLARE_VECTOR_POINTERS_TYPE(ZL_Data)
 DECLARE_VECTOR_CONST_POINTERS_TYPE(ZL_Data)
 
 /**
+ * One integer metadata entry attached to a Stream.
+ *
+ * This type is exposed by the internal Stream interface so callers that need
+ * to snapshot a stream can preserve both the metadata identifier and value.
+ * The public lookup API returns only the value for a caller-supplied ID.
+ */
+typedef struct {
+    /** Identifier passed to STREAM_setIntMetadata(). */
+    int id;
+    /** Integer value associated with this entry's identifier. */
+    int value;
+} Stream_IntMetadata;
+
+/**
  * Internal Stream interface.
  *
  * Public callers should continue to rely on the ZL_Data_* façade declared in
@@ -237,6 +251,26 @@ size_t STREAM_byteCapacity(const Stream* s);
  */
 ZL_Report STREAM_setIntMetadata(Stream* s, int mId, int mValue);
 ZL_IntMetadata STREAM_getIntMetadata(const Stream* s, int mId);
+
+/** Number of integer metadata entries attached to @p s. */
+size_t STREAM_numIntMetadata(const Stream* s);
+
+/**
+ * Copy every integer metadata entry from @p src into @p dst.
+ *
+ * @p dst must have capacity for at least @p expectedEntries entries.
+ * @p expectedEntries must exactly equal STREAM_numIntMetadata(src). @p dst
+ * may be NULL only when @p expectedEntries is zero. Invalid arguments return
+ * an error without modifying @p dst.
+ *
+ * Metadata lookup semantics do not depend on entry order. This function
+ * nevertheless preserves stable stream order, so callers that hash or compare
+ * the copied representation bytewise will distinguish different orders.
+ */
+ZL_Report STREAM_copyIntMetadata(
+        Stream_IntMetadata* dst,
+        const Stream* src,
+        size_t expectedEntries);
 
 /**
  * Hash the content of all streams provided in @p streams.
