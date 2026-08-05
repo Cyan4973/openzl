@@ -9,6 +9,7 @@
 
 #include "openzl/common/stream.h" // Stream_IntMetadata
 #include "openzl/shared/portability.h"
+#include "openzl/zl_codec_output_cache.h"
 #include "openzl/zl_data.h"
 
 ZL_BEGIN_C_DECLS
@@ -29,8 +30,8 @@ ZL_BEGIN_C_DECLS
  * A hash is used to locate candidates quickly, but a hit is accepted only
  * after exact comparison of every output-affecting key field. Hash collisions
  * therefore cannot turn one codec invocation into another invocation's result.
+ * The opaque ZL_CodecOutputCache handle is declared by the public cache header.
  */
-typedef struct ZL_CodecOutputCache_s ZL_CodecOutputCache;
 typedef struct CodecCache_Lookup_s CodecCache_Lookup;
 
 /**
@@ -85,27 +86,59 @@ typedef struct {
     size_t hits;
     /** Cacheable lookups for which no exact invocation matched. */
     size_t misses;
-    /** New entries successfully stored. */
+    /** New results successfully stored. */
     size_t inserts;
     /** Insertions skipped because an exact key was already present. */
     size_t duplicateInserts;
-    /**
-     * Insertions skipped because size accounting overflowed or hit the budget.
+    /** Invocations skipped because the transform is registered by the caller.
+     */
+    size_t customCodecSkips;
+    /** Invocations skipped because they have a local reference parameter. */
+    size_t refParamSkips;
+    /** Invocations skipped because they reference a dictionary. */
+    size_t dictSkips;
+    /** Invocations skipped because they have a materialized parameter. */
+    size_t mparamSkips;
+    /** Invocations skipped because they consume or produce string streams. */
+    size_t stringSkips;
+    /** Invocations skipped because they do not consume exactly one input. */
+    size_t nonSingleInputSkips;
+    /** Insertions skipped because size accounting overflowed or hit the budget.
      */
     size_t budgetSkips;
     /** Insertions skipped after an allocation failure. */
     size_t allocationFailures;
     /**
-     * Budgeted bytes owned by entries. Includes copied descriptors, contents,
-     * metadata, parameters, and headers, but excludes map and arena overhead.
+     * Budgeted bytes owned by cached invocations. Includes copied descriptors,
+     * contents, metadata, parameters, and headers, but excludes map and arena
+     * overhead.
      */
     size_t bytesStored;
     /** Total bytes currently held by the cache arena, including overhead. */
     size_t arenaBytes;
 } CodecCache_Stats;
 
+/** Reason an otherwise encountered codec invocation was not cacheable. */
+typedef enum {
+    /** The transform is registered by the caller rather than OpenZL. */
+    CodecCache_SkipReason_customCodec,
+    /** A local reference parameter can affect output without entering the key.
+     */
+    CodecCache_SkipReason_refParam,
+    /** A referenced dictionary can affect output without entering the key. */
+    CodecCache_SkipReason_dict,
+    /** A materialized parameter can affect output without entering the key. */
+    CodecCache_SkipReason_mparam,
+    /** String streams include length data not represented by this cache key. */
+    CodecCache_SkipReason_string,
+    /** The cache only represents single-input codec invocations. */
+    CodecCache_SkipReason_nonSingleInput,
+} CodecCache_SkipReason;
+
 /** Outcome of CodecCache_store(). All non-stored outcomes are non-fatal. */
 typedef enum {
+    /** The completed invocation has an output the cache cannot represent. */
+    CodecCache_InsertResult_notCacheable,
     /** A deep-copied entry was added. */
     CodecCache_InsertResult_inserted,
     /** The key already existed; the original entry was retained. */
@@ -142,6 +175,11 @@ void CodecCache_setStatsEnabled(ZL_CodecOutputCache* cache, bool enabled);
  * statistics collection is disabled. @p cache is non-NULL.
  */
 CodecCache_Stats CodecCache_getStats(const ZL_CodecOutputCache* cache);
+
+/** Increments the skip counter corresponding to @p reason. */
+void CodecCache_recordSkip(
+        ZL_CodecOutputCache* cache,
+        CodecCache_SkipReason reason);
 
 /**
  * Looks up one single-input codec invocation and records a hit or miss.
