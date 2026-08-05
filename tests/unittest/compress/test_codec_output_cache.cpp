@@ -28,7 +28,7 @@ namespace {
 
 class Cache {
    public:
-    Cache() : cache_(CodecCache_createDefault())
+    Cache() : cache_(CodecCache_create(CodecCache_getDefaultMaxBytes()))
     {
         if (cache_ != nullptr) {
             CodecCache_setStatsEnabled(cache_, true);
@@ -176,7 +176,8 @@ TEST_F(CodecOutputCacheTest, CreateEmpty)
 TEST_F(CodecOutputCacheTest, StatisticsAreDisabledByDefault)
 {
     std::unique_ptr<ZL_CodecOutputCache, decltype(&CodecCache_free)> cache(
-            CodecCache_createDefault(), &CodecCache_free);
+            CodecCache_create(CodecCache_getDefaultMaxBytes()),
+            &CodecCache_free);
     ASSERT_NE(cache, nullptr);
     const Stream* const input = makeInput("input", 5);
     ASSERT_NE(input, nullptr);
@@ -461,6 +462,30 @@ TEST_F(CodecOutputCacheTest, DifferentCopyParamValuesDoNotShareResult)
             cache.get(), ZL_NODE_SPARSE_NUM, input, &secondParams);
     ASSERT_NE(second, nullptr);
     EXPECT_EQ(CodecCache_Lookup_getResult(second), nullptr);
+}
+
+TEST_F(CodecOutputCacheTest, DisabledInsertionsStillAllowHits)
+{
+    Cache cache;
+    const Stream* const storedInput = makeInput("stored", 6);
+    const Stream* const newInput    = makeInput("new", 3);
+    ASSERT_NE(storedInput, nullptr);
+    ASSERT_NE(newInput, nullptr);
+    CodecCache_Lookup* const miss =
+            lookup(cache.get(), ZL_NODE_SPARSE_NUM, storedInput);
+    ASSERT_NE(miss, nullptr);
+    const CodecCache_Output output = makeOutput("output", 6);
+    const CodecCache_Result result = makeResult(&output, 1);
+    ASSERT_EQ(
+            CodecCache_store(miss, &result), CodecCache_InsertResult_inserted);
+
+    CodecCache_setInsertionsEnabled(cache.get(), false);
+    CodecCache_Lookup* const hit =
+            lookup(cache.get(), ZL_NODE_SPARSE_NUM, storedInput);
+    ASSERT_NE(hit, nullptr);
+    EXPECT_NE(CodecCache_Lookup_getResult(hit), nullptr);
+    EXPECT_EQ(lookup(cache.get(), ZL_NODE_SPARSE_NUM, newInput), nullptr);
+    EXPECT_EQ(CodecCache_getStats(cache.get()).inserts, 1);
 }
 
 TEST_F(CodecOutputCacheTest, EncoderNodeNotWireTransformIdentifiesInvocation)
