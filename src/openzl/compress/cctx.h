@@ -438,6 +438,28 @@ ZL_Data* CCTX_refContentIntoNewStream(
         ZL_Data const* src,
         size_t offsetBytes);
 
+typedef ZL_Data* CCTX_DataPtr;
+ZL_RESULT_DECLARE_TYPE(CCTX_DataPtr);
+
+/**
+ * Create a committed output stream that references an immutable external
+ * buffer without taking ownership of it.
+ *
+ * The stream type is determined by @p outcomeID. The buffer must remain valid
+ * and immutable for the lifetime of the returned stream.
+ *
+ * @return The created stream, or the error reported while creating and
+ * registering it.
+ */
+ZL_RESULT_OF(CCTX_DataPtr)
+CCTX_refConstBufferIntoNewStream(
+        ZL_CCtx* cctx,
+        RTNodeID rtnodeid,
+        int outcomeID,
+        size_t eltWidth,
+        size_t eltCount,
+        const void* src);
+
 /**
  * @brief Commit the actual sizes of output streams produced by a transform
  * node.
