@@ -31,6 +31,8 @@ struct Stream_s { // exposed publicly as ZL_Data
     size_t lastCommmited; // tracks the eltCount of most recent commit
     VECTOR(Stream_IntMetadata) intMetas; // Metadata (arbitrary ID+Ints)
     Arena* alloc;
+    bool codecCacheKeyHashValid;
+    uint64_t codecCacheKeyHash;
 };
 
 struct ZL_Input_s {
@@ -40,6 +42,14 @@ struct ZL_Input_s {
 struct ZL_Output_s {
     Stream data;
 };
+
+static void STREAM_invalidateCodecCacheKeyHash(Stream* stream)
+{
+    if (stream == NULL) {
+        return;
+    }
+    stream->codecCacheKeyHashValid = false;
+}
 
 // ================================
 // Allocation & lifetime management
@@ -397,6 +407,7 @@ ZL_Report STREAM_refStreamWithoutRefCount(Stream* s, const Stream* ref)
     ZL_ASSERT_NN(ref);
     ZL_ASSERT(ref->writeCommitted);
     ZL_ERR_IF(s->writeCommitted, stream_wrongInit, "Stream already committed");
+    STREAM_invalidateCodecCacheKeyHash(s);
     s->type           = ref->type;
     s->eltCount       = ref->eltCount;
     s->eltWidth       = ref->eltWidth;
@@ -426,6 +437,11 @@ ZL_Report STREAM_refStreamWithoutRefCount(Stream* s, const Stream* ref)
     // Turn our buffers into immutable references
     ZL_Refcount_constify(&s->buffer);
     ZL_Refcount_constify(&s->stringLens);
+
+    uint64_t hash;
+    if (STREAM_getCodecCacheKeyHash(ref, &hash)) {
+        STREAM_setCodecCacheKeyHash(s, hash);
+    }
 
     return ZL_returnSuccess();
 }
@@ -513,6 +529,8 @@ ZL_Report STREAM_refStreamSliceWithoutRefCount(
     ZL_ERR_IF_ERR(STREAM_refStreamWithoutRefCount(dst, src));
     if (eltCount == STREAM_eltCount(src))
         return ZL_returnSuccess();
+
+    STREAM_invalidateCodecCacheKeyHash(dst);
 
     if (STREAM_type(src) == ZL_Type_string) {
         return STREAM_refStreamStringSlice(dst, src, startingEltNum, eltCount);
@@ -694,6 +712,7 @@ void* STREAM_wPtr(Stream* s)
 {
     if (s == NULL || ZL_Refcount_null(&s->buffer))
         return NULL;
+    STREAM_invalidateCodecCacheKeyHash(s);
     void* basePtr = ZL_Refcount_getMut(&s->buffer);
     ZL_ASSERT_LE(s->bufferUsed, s->bufferCapacity);
     return (char*)basePtr + s->bufferUsed;
@@ -827,6 +846,7 @@ ZL_Report STREAM_commit(Stream* s, size_t eltCount)
             s->eltsCapacity,
             stream_wrongInit,
             "Stream capacity too small");
+    STREAM_invalidateCodecCacheKeyHash(s);
     if (s->type == ZL_Type_string) {
         return STREAM_commitStrings(s, eltCount);
     }
@@ -872,6 +892,7 @@ uint32_t* STREAM_wStringLens(Stream* stream)
 void STREAM_clear(Stream* s)
 {
     ZL_ASSERT_NN(s);
+    STREAM_invalidateCodecCacheKeyHash(s);
     s->writeCommitted = 0;
     s->eltCount       = 0;
     s->lastCommmited  = 0;
@@ -1053,6 +1074,7 @@ ZL_Report STREAM_consume(Stream* data, size_t eltCount)
     ZL_ERR_IF_GT(eltCount, STREAM_eltCount(data), parameter_invalid);
     if (STREAM_type(data) == ZL_Type_string)
         return STREAM_consumeStrings(data, eltCount);
+    STREAM_invalidateCodecCacheKeyHash(data);
     size_t eltSize    = STREAM_eltWidth(data);
     data->buffer._ptr = (char*)data->buffer._ptr + (eltCount * eltSize);
     data->eltCount -= eltCount;
@@ -1092,7 +1114,26 @@ ZL_Report STREAM_setIntMetadata(Stream* s, int mId, int mValue)
                     s->intMetas,
                     ((Stream_IntMetadata){ .id = mId, .value = mValue })),
             allocation);
+    STREAM_invalidateCodecCacheKeyHash(s);
     return ZL_returnSuccess();
+}
+
+void STREAM_setCodecCacheKeyHash(Stream* s, uint64_t hash)
+{
+    ZL_ASSERT_NN(s);
+    s->codecCacheKeyHash      = hash;
+    s->codecCacheKeyHashValid = true;
+}
+
+bool STREAM_getCodecCacheKeyHash(const Stream* s, uint64_t* hash)
+{
+    ZL_ASSERT_NN(s);
+    ZL_ASSERT_NN(hash);
+    if (!s->codecCacheKeyHashValid) {
+        return false;
+    }
+    *hash = s->codecCacheKeyHash;
+    return true;
 }
 
 #define ZL_INTMETADATA_NOT_PRESENT (-1)

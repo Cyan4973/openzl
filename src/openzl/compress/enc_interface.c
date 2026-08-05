@@ -306,6 +306,8 @@ static ZL_Report ENC_replayCodecOutputCacheResult(
                     cached->intMetadata[m].id,
                     cached->intMetadata[m].value));
         }
+        STREAM_setCodecCacheKeyHash(
+                ZL_codemodOutputAsData(output), cached->keyHash64);
     }
     if (result->headerSize != 0) {
         ZL_Encoder_sendCodecHeader(eictx, result->header, result->headerSize);

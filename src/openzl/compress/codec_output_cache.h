@@ -63,6 +63,12 @@ typedef struct {
      * `nbIntMetadata` is nonzero; deep-copied on insertion.
      */
     const Stream_IntMetadata* intMetadata;
+    /**
+     * Cache-computed digest used when this output becomes a later codec input.
+     * CodecCache_store() ignores the caller's value and fills the stored copy;
+     * replay stamps it on the reconstructed stream to avoid rehashing.
+     */
+    uint64_t keyHash64;
 } CodecCache_Output;
 
 /** Complete result of one successful codec invocation. */
@@ -191,6 +197,12 @@ void CodecCache_captureCompletedStats(ZL_CodecOutputCache* cache);
 /** Returns the most recently captured completed-run statistics. */
 CodecCache_Stats CodecCache_getLastCompletedStats(
         const ZL_CodecOutputCache* cache);
+
+/** Records that a stream's previously computed cache-key digest was reused. */
+void CodecCache_recordHashReuse(ZL_CodecOutputCache* cache);
+
+/** Returns hash reuses recorded since creation or the last reset. */
+size_t CodecCache_getHashReuses(const ZL_CodecOutputCache* cache);
 
 /** Increments the skip counter corresponding to @p reason. */
 void CodecCache_recordSkip(

@@ -58,6 +58,7 @@ struct ZL_CodecOutputCache_s {
     size_t bytesStored;
     bool insertionsEnabled;
     bool statsEnabled;
+    size_t hashReuses;
     CodecCache_Stats stats;
     CodecCache_Stats lastCompletedStats;
 };
@@ -170,9 +171,19 @@ static void CodecCache_updateInputHash(
     }
 }
 
+static uint64_t CodecCache_hashInput(const CodecCache_Input* input)
+{
+    XXH3_state_t state;
+    XXH3_INITSTATE(&state);
+    XXH3_64bits_reset(&state);
+    CodecCache_updateInputHash(&state, input);
+    return XXH3_64bits_digest(&state);
+}
+
 static bool CodecCache_buildInput(
         CodecCache_Input* cacheInput,
         uint64_t* contentHash,
+        ZL_CodecOutputCache* cache,
         Arena* scratchArena,
         const ZL_Data* input)
 {
@@ -202,11 +213,14 @@ static bool CodecCache_buildInput(
         cacheInput->intMetadata = metadata;
     }
 
-    XXH3_state_t state;
-    XXH3_INITSTATE(&state);
-    XXH3_64bits_reset(&state);
-    CodecCache_updateInputHash(&state, cacheInput);
-    *contentHash = XXH3_64bits_digest(&state);
+    uint64_t memoizedHash;
+    if (STREAM_getCodecCacheKeyHash(input, &memoizedHash)) {
+        *contentHash = memoizedHash;
+        CodecCache_recordHashReuse(cache);
+        return true;
+    }
+
+    *contentHash = CodecCache_hashInput(cacheInput);
     return true;
 }
 
@@ -355,7 +369,7 @@ static bool CodecCache_buildKey(
     CodecCache_Input cacheInput;
     uint64_t contentHash;
     if (!CodecCache_buildInput(
-                &cacheInput, &contentHash, encoder->wkspArena, input)) {
+                &cacheInput, &contentHash, cache, encoder->wkspArena, input)) {
         return false;
     }
     void* localParams;
@@ -425,6 +439,7 @@ static void CodecCache_resetCurrent(ZL_CodecOutputCache* cache)
     cache->bytesStored       = 0;
     cache->insertionsEnabled = true;
     if (cache->statsEnabled) {
+        cache->hashReuses = 0;
         memset(&cache->stats, 0, sizeof(cache->stats));
     }
 }
@@ -433,6 +448,7 @@ void CodecCache_setStatsEnabled(ZL_CodecOutputCache* cache, bool enabled)
 {
     ZL_ASSERT_NN(cache);
     cache->statsEnabled = enabled;
+    cache->hashReuses   = 0;
     memset(&cache->stats, 0, sizeof(cache->stats));
     memset(&cache->lastCompletedStats, 0, sizeof(cache->lastCompletedStats));
 }
@@ -462,6 +478,20 @@ void CodecCache_setInsertionsEnabled(ZL_CodecOutputCache* cache, bool enabled)
 {
     ZL_ASSERT_NN(cache);
     cache->insertionsEnabled = enabled;
+}
+
+void CodecCache_recordHashReuse(ZL_CodecOutputCache* cache)
+{
+    ZL_ASSERT_NN(cache);
+    if (cache->statsEnabled) {
+        ++cache->hashReuses;
+    }
+}
+
+size_t CodecCache_getHashReuses(const ZL_CodecOutputCache* cache)
+{
+    ZL_ASSERT_NN(cache);
+    return cache->statsEnabled ? cache->hashReuses : 0;
 }
 
 CodecCache_Stats CodecCache_getStats(const ZL_CodecOutputCache* cache)
@@ -732,6 +762,16 @@ static bool CodecCache_copyOutputs(
             CodecCache_freeOutputs(cacheArena, outputs, i + 1);
             return false;
         }
+        const CodecCache_Input outputAsInput = {
+            .type          = outputs[i].type,
+            .eltWidth      = outputs[i].eltWidth,
+            .numElts       = outputs[i].numElts,
+            .contentSize   = outputs[i].contentSize,
+            .content       = outputs[i].content,
+            .nbIntMetadata = outputs[i].nbIntMetadata,
+            .intMetadata   = outputs[i].intMetadata,
+        };
+        outputs[i].keyHash64 = CodecCache_hashInput(&outputAsInput);
     }
     dst->outputs = outputs;
     return true;
