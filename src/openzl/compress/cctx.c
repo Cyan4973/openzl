@@ -1604,6 +1604,36 @@ ZL_Data* CCTX_refContentIntoNewStream(
     return RTGM_getWStream(&cctx->rtgraph, newRTStreamID);
 }
 
+ZL_RESULT_OF(CCTX_DataPtr)
+CCTX_refConstBufferIntoNewStream(
+        ZL_CCtx* cctx,
+        RTNodeID rtnodeid,
+        int outcomeID,
+        size_t eltWidth,
+        size_t nbElts,
+        const void* src)
+{
+    ZL_RESULT_DECLARE_SCOPE(CCTX_DataPtr, cctx);
+    ZL_DLOG(BLOCK,
+            "CCTX_refConstBufferIntoNewStream (rtnodeid = %u)",
+            rtnodeid.rtnid);
+
+    const CNode* const cnode = RTGM_getCNode(&cctx->rtgraph, rtnodeid);
+    ZL_TRY_LET(
+            RTStreamID,
+            newRTStreamID,
+            RTGM_refConstBufferIntoNewStream(
+                    &cctx->rtgraph,
+                    rtnodeid,
+                    outcomeID,
+                    CNODE_isVO(cnode, outcomeID),
+                    CNODE_getOutStreamType(cnode, outcomeID),
+                    eltWidth,
+                    nbElts,
+                    src));
+    return ZL_WRAP_VALUE(RTGM_getWStream(&cctx->rtgraph, newRTStreamID));
+}
+
 ZL_Report CCTX_setOutBufferSizes(
         ZL_CCtx* cctx,
         RTNodeID rtnodeid,
