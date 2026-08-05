@@ -81,7 +81,7 @@ typedef struct {
 } CodecCache_Result;
 
 /** Cache activity and memory accounting since creation or the last reset. */
-typedef struct {
+typedef struct CodecCache_Stats {
     /** Lookups that found an exact invocation match. */
     size_t hits;
     /** Cacheable lookups for which no exact invocation matched. */
@@ -155,14 +155,23 @@ typedef enum {
  */
 ZL_CodecOutputCache* CodecCache_create(size_t maxBytes);
 
-/** Creates an empty cache with the default entry-payload budget. */
-ZL_CodecOutputCache* CodecCache_createDefault(void);
+/** Returns the default entry-payload budget. */
+size_t CodecCache_getDefaultMaxBytes(void);
 
 /** Frees the cache and all owned entries. Accepts NULL. */
 void CodecCache_free(ZL_CodecOutputCache* cache);
 
 /** Removes all entries and clears all counters. Accepts NULL. */
 void CodecCache_reset(ZL_CodecOutputCache* cache);
+
+/**
+ * Removes all entries and current counters while retaining the most recently
+ * captured completed-run statistics. Accepts NULL.
+ */
+void CodecCache_resetPreservingCompletedStats(ZL_CodecOutputCache* cache);
+
+/** Enables or disables storing new results without affecting existing hits. */
+void CodecCache_setInsertionsEnabled(ZL_CodecOutputCache* cache, bool enabled);
 
 /**
  * Enables or disables statistics collection and clears all statistics.
@@ -176,6 +185,13 @@ void CodecCache_setStatsEnabled(ZL_CodecOutputCache* cache, bool enabled);
  */
 CodecCache_Stats CodecCache_getStats(const ZL_CodecOutputCache* cache);
 
+/** Captures the current statistics as the most recently completed run. */
+void CodecCache_captureCompletedStats(ZL_CodecOutputCache* cache);
+
+/** Returns the most recently captured completed-run statistics. */
+CodecCache_Stats CodecCache_getLastCompletedStats(
+        const ZL_CodecOutputCache* cache);
+
 /** Increments the skip counter corresponding to @p reason. */
 void CodecCache_recordSkip(
         ZL_CodecOutputCache* cache,
@@ -188,9 +204,10 @@ void CodecCache_recordSkip(
  * ID or a caller-derived base node. The cache resolves the stable built-in
  * encoder identity and all other output-affecting key fields internally.
  *
- * Returns NULL when the invocation is not cacheable or temporary key
- * construction fails. Otherwise, the returned lookup is allocated in @p
- * encoder's workspace and remains valid for that encoder invocation.
+ * Returns NULL when the invocation is not cacheable, temporary key
+ * construction fails, or insertion is disabled and no result matches.
+ * Otherwise, the returned lookup is allocated in @p encoder's workspace and
+ * remains valid for that encoder invocation.
  */
 CodecCache_Lookup* CodecCache_lookup(
         ZL_CodecOutputCache* cache,

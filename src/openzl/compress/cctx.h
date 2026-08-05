@@ -6,10 +6,12 @@
 #include "openzl/compress/encode_frameheader.h" // EFH_FrameInfo, GraphInfo
 #include "openzl/compress/rtgraphs.h"           // RTNodeID
 #include "openzl/shared/portability.h"
-#include "openzl/zl_codec_output_cache.h"
-#include "openzl/zl_compress.h" // ZL_CCtx, ZL_GraphFn, ZL_Report
+#include "openzl/zl_codec_output_cache.h" // ZL_CodecOutputCache
+#include "openzl/zl_compress.h"           // ZL_CCtx, ZL_GraphFn, ZL_Report
 
 ZL_BEGIN_C_DECLS
+
+struct CodecCache_Stats;
 
 /**
  * @brief Create a new compression context.
@@ -238,8 +240,20 @@ ZL_Report CCTX_sendTrHeader(ZL_CCtx* cctx, RTNodeID rtnodeid, ZL_RBuffer trh);
 /** Returns the transform header staged for @p rtnodeid, or an empty buffer. */
 ZL_RBuffer CCTX_getNodeHeader(const ZL_CCtx* cctx, RTNodeID rtnodeid);
 
-/** Returns the borrowed codec output cache attached to @p cctx, if any. */
+/** Returns the codec output cache active for @p cctx, if any. */
 ZL_CodecOutputCache* CCTX_getCodecOutputCache(const ZL_CCtx* cctx);
+
+/**
+ * Returns cumulative private tryGraph cache statistics for the most recently
+ * completed chunk. All tryGraph subtrees in a chunk share entries and
+ * counters. Caller-attached caches must be queried directly.
+ */
+void CCTX_getLastChunkTryGraphCacheStats(
+        struct CodecCache_Stats* stats,
+        const ZL_CCtx* cctx);
+
+/** Enables internal private tryGraph cache statistics collection. */
+void CCTX_setTryGraphCacheStatsEnabled(ZL_CCtx* cctx, bool enabled);
 
 /**
  * @brief Start the compression process with the provided input data.
@@ -794,7 +808,7 @@ ZL_Report CCTX_compressInputs_withGraphSet(
 
 ZL_RESULT_OF(ZL_GraphPerformance)
 CCTX_tryGraph(
-        const ZL_CCtx* parentCCtx,
+        ZL_CCtx* parentCCtx,
         const ZL_Input* inputs[],
         size_t numInputs,
         Arena* wkspArena,

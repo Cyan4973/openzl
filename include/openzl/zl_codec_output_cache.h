@@ -38,8 +38,9 @@ ZL_CodecOutputCache* ZL_CodecOutputCache_create(void);
 
 /**
  * Creates an empty cache with the specified entry-payload budget.
- * Zero prevents entries from being stored. Reaching @p maxBytes skips new
- * entries; it does not fail compression.
+ * Zero creates a live cache that cannot store entries; cacheable invocations
+ * still perform hashing and lookups when it is attached. Reaching @p maxBytes
+ * skips new entries; it does not fail compression.
  */
 ZL_CodecOutputCache* ZL_CodecOutputCache_createWithBudget(size_t maxBytes);
 
@@ -50,8 +51,21 @@ void ZL_CodecOutputCache_free(ZL_CodecOutputCache* cache);
 void ZL_CodecOutputCache_reset(ZL_CodecOutputCache* cache);
 
 /**
- * Attaches a borrowed cache to @p cctx. Passing NULL disables caching.
- * The cache must outlive every compression that uses the context.
+ * Sets the entry-payload budget for the private cache used automatically by
+ * tryGraph. Automatic caching is disabled by default. A positive value enables
+ * it with the specified budget; zero disables it.
+ *
+ * Changing the budget drops the existing private cache. Call this function
+ * only between compressions. The setting persists until changed or the
+ * context is freed; ZL_CParam_stickyParameters and ZL_CCtx_resetParameters()
+ * do not affect it. A caller-attached cache is unaffected and remains active.
+ */
+ZL_Report ZL_CCtx_setTryGraphCacheBudget(ZL_CCtx* cctx, size_t maxBytes);
+
+/**
+ * Attaches a borrowed cache to @p cctx. Passing NULL detaches it; automatic
+ * tryGraph caching remains controlled by ZL_CCtx_setTryGraphCacheBudget(). The
+ * cache must outlive every compression that uses the context.
  */
 ZL_Report ZL_CCtx_setCodecOutputCache(
         ZL_CCtx* cctx,
