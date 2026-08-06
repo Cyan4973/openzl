@@ -56,8 +56,10 @@ struct ZL_CodecOutputCache_s {
     CodecCache_Map map;
     size_t maxBytes;
     size_t bytesStored;
+    bool insertionsEnabled;
     bool statsEnabled;
     CodecCache_Stats stats;
+    CodecCache_Stats lastCompletedStats;
 };
 
 struct CodecCache_Lookup_s {
@@ -393,15 +395,16 @@ ZL_CodecOutputCache* CodecCache_create(size_t maxBytes)
         ZL_free(cache);
         return NULL;
     }
-    cache->maxBytes = maxBytes;
-    cache->map      = CodecCache_Map_createInArena(
+    cache->maxBytes          = maxBytes;
+    cache->insertionsEnabled = true;
+    cache->map               = CodecCache_Map_createInArena(
             cache->cacheArena, CODEC_CACHE_MAX_ENTRIES);
     return cache;
 }
 
-ZL_CodecOutputCache* CodecCache_createDefault(void)
+size_t CodecCache_getDefaultMaxBytes(void)
 {
-    return CodecCache_create(CODEC_CACHE_DEFAULT_MAX_BYTES);
+    return CODEC_CACHE_DEFAULT_MAX_BYTES;
 }
 
 void CodecCache_free(ZL_CodecOutputCache* cache)
@@ -413,15 +416,14 @@ void CodecCache_free(ZL_CodecOutputCache* cache)
     ZL_free(cache);
 }
 
-void CodecCache_reset(ZL_CodecOutputCache* cache)
+static void CodecCache_resetCurrent(ZL_CodecOutputCache* cache)
 {
-    if (cache == NULL) {
-        return;
-    }
+    ZL_ASSERT_NN(cache);
     ALLOC_Arena_freeAll(cache->cacheArena);
     cache->map = CodecCache_Map_createInArena(
             cache->cacheArena, CODEC_CACHE_MAX_ENTRIES);
-    cache->bytesStored = 0;
+    cache->bytesStored       = 0;
+    cache->insertionsEnabled = true;
     if (cache->statsEnabled) {
         memset(&cache->stats, 0, sizeof(cache->stats));
     }
@@ -432,6 +434,34 @@ void CodecCache_setStatsEnabled(ZL_CodecOutputCache* cache, bool enabled)
     ZL_ASSERT_NN(cache);
     cache->statsEnabled = enabled;
     memset(&cache->stats, 0, sizeof(cache->stats));
+    memset(&cache->lastCompletedStats, 0, sizeof(cache->lastCompletedStats));
+}
+
+void CodecCache_reset(ZL_CodecOutputCache* cache)
+{
+    if (cache == NULL) {
+        return;
+    }
+    CodecCache_resetCurrent(cache);
+    if (cache->statsEnabled) {
+        memset(&cache->lastCompletedStats,
+               0,
+               sizeof(cache->lastCompletedStats));
+    }
+}
+
+void CodecCache_resetPreservingCompletedStats(ZL_CodecOutputCache* cache)
+{
+    if (cache == NULL) {
+        return;
+    }
+    CodecCache_resetCurrent(cache);
+}
+
+void CodecCache_setInsertionsEnabled(ZL_CodecOutputCache* cache, bool enabled)
+{
+    ZL_ASSERT_NN(cache);
+    cache->insertionsEnabled = enabled;
 }
 
 CodecCache_Stats CodecCache_getStats(const ZL_CodecOutputCache* cache)
@@ -446,11 +476,32 @@ CodecCache_Stats CodecCache_getStats(const ZL_CodecOutputCache* cache)
     return stats;
 }
 
+void CodecCache_captureCompletedStats(ZL_CodecOutputCache* cache)
+{
+    ZL_ASSERT_NN(cache);
+    if (cache->statsEnabled) {
+        cache->lastCompletedStats = CodecCache_getStats(cache);
+    }
+}
+
+CodecCache_Stats CodecCache_getLastCompletedStats(
+        const ZL_CodecOutputCache* cache)
+{
+    ZL_ASSERT_NN(cache);
+    if (!cache->statsEnabled) {
+        return (CodecCache_Stats){ 0 };
+    }
+    return cache->lastCompletedStats;
+}
+
 void CodecCache_recordSkip(
         ZL_CodecOutputCache* cache,
         CodecCache_SkipReason reason)
 {
     ZL_ASSERT_NN(cache);
+    if (!cache->statsEnabled) {
+        return;
+    }
     switch (reason) {
         case CodecCache_SkipReason_customCodec:
             ++cache->stats.customCodecSkips;
@@ -475,7 +526,7 @@ void CodecCache_recordSkip(
 
 ZL_CodecOutputCache* ZL_CodecOutputCache_create(void)
 {
-    return CodecCache_createDefault();
+    return CodecCache_create(CodecCache_getDefaultMaxBytes());
 }
 
 ZL_CodecOutputCache* ZL_CodecOutputCache_createWithBudget(size_t maxBytes)
@@ -513,6 +564,9 @@ CodecCache_Lookup* CodecCache_lookup(
     if (found == NULL) {
         if (cache->statsEnabled) {
             ++cache->stats.misses;
+        }
+        if (!cache->insertionsEnabled) {
+            return NULL;
         }
         lookup->result = NULL;
     } else {
@@ -705,6 +759,10 @@ CodecCache_InsertResult CodecCache_store(
     ZL_ASSERT_NN(result);
     ZL_CodecOutputCache* const cache = lookup->cache;
     const CodecCache_Key* const key  = &lookup->key;
+
+    if (!cache->insertionsEnabled) {
+        return CodecCache_InsertResult_notCacheable;
+    }
 
     for (size_t i = 0; i < result->nbOutputs; ++i) {
         if (result->outputs[i].type == ZL_Type_string) {

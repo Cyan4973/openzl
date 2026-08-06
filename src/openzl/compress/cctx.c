@@ -130,11 +130,15 @@ struct ZL_CCtx_s {
     const ZL_Compressor* cgraph;
     ZL_Compressor* internal_cgraph;
     RTGraph rtgraph;
-    CachedStates cachedCodecStates;        // @note valid for single-thread only
-    ZL_CodecOutputCache* codecOutputCache; // borrowed; NULL means disabled
-    GCParams requestedGCParams;            // User selection, at CCtx level
-    GCParams appliedGCParams;              // Employed at compression time;
-                                           // CCtx > Compressor > default
+    CachedStates cachedCodecStates; // @note valid for single-thread only
+    ZL_CodecOutputCache* attachedCodecOutputCache; // borrowed
+    ZL_CodecOutputCache* tryGraphCodecOutputCache; // owned; lazily allocated
+    size_t tryGraphCodecOutputCacheMaxBytes; // 0 disables automatic caching
+    bool tryGraphCodecOutputCacheActive;
+    bool tryGraphCodecOutputCacheStatsEnabled;
+    GCParams requestedGCParams; // User selection, at CCtx level
+    GCParams appliedGCParams;   // Employed at compression time;
+                                // CCtx > Compressor > default
     /// Comment to be added to the header. Is not added when size is 0.
     ZL_Comment comment;
     CCTX_TransformHeaders trHeaders;
@@ -174,6 +178,7 @@ static ZL_Report CCTX_init(ZL_CCtx* cctx)
     ZL_ERR_IF_ERR(RTGM_init(&cctx->rtgraph));
     TRS_init(&cctx->cachedCodecStates);
     CCTX_TransformHeaders_init(&cctx->trHeaders);
+    cctx->tryGraphCodecOutputCacheMaxBytes = 0;
 
     return ZL_returnSuccess();
 }
@@ -196,6 +201,13 @@ void CCTX_cleanChunk(ZL_CCtx* cctx)
     RTGM_reset(&cctx->rtgraph);
     CCTX_TransformHeaders_reset(&cctx->trHeaders);
     ALLOC_Arena_freeAll(cctx->chunkArena);
+    /* The RTGraph reset above releases referenced outputs before private cache
+     * entries are cleared. */
+    if (cctx->tryGraphCodecOutputCache != NULL) {
+        CodecCache_resetPreservingCompletedStats(
+                cctx->tryGraphCodecOutputCache);
+    }
+    cctx->tryGraphCodecOutputCacheActive = false;
 }
 
 // clean context, in order to re-use it
@@ -216,6 +228,7 @@ void CCTX_free(ZL_CCtx* cctx)
     if (cctx == NULL)
         return;
     TRS_destroy(&cctx->cachedCodecStates);
+    CodecCache_free(cctx->tryGraphCodecOutputCache);
     ZL_Compressor_free(cctx->internal_cgraph);
     RTGM_destroy(&cctx->rtgraph);
     CCTX_TransformHeaders_destroy(&cctx->trHeaders);
@@ -438,14 +451,94 @@ ZL_RBuffer CCTX_getNodeHeader(const ZL_CCtx* cctx, RTNodeID rtnodeid)
 ZL_CodecOutputCache* CCTX_getCodecOutputCache(const ZL_CCtx* cctx)
 {
     ZL_ASSERT_NN(cctx);
-    return cctx->codecOutputCache;
+    if (cctx->attachedCodecOutputCache != NULL) {
+        return cctx->attachedCodecOutputCache;
+    }
+    return cctx->tryGraphCodecOutputCacheActive ? cctx->tryGraphCodecOutputCache
+                                                : NULL;
+}
+
+void CCTX_getLastChunkTryGraphCacheStats(
+        CodecCache_Stats* stats,
+        const ZL_CCtx* cctx)
+{
+    ZL_ASSERT_NN(stats);
+    ZL_ASSERT_NN(cctx);
+    if (!cctx->tryGraphCodecOutputCacheStatsEnabled
+        || cctx->tryGraphCodecOutputCache == NULL) {
+        *stats = (CodecCache_Stats){ 0 };
+        return;
+    }
+    *stats = CodecCache_getLastCompletedStats(cctx->tryGraphCodecOutputCache);
+}
+
+void CCTX_setTryGraphCacheStatsEnabled(ZL_CCtx* cctx, bool enabled)
+{
+    ZL_ASSERT_NN(cctx);
+    cctx->tryGraphCodecOutputCacheStatsEnabled = enabled;
+    if (cctx->tryGraphCodecOutputCache != NULL) {
+        CodecCache_setStatsEnabled(cctx->tryGraphCodecOutputCache, enabled);
+    }
+}
+
+ZL_Report ZL_CCtx_setTryGraphCacheBudget(ZL_CCtx* cctx, size_t maxBytes)
+{
+    ZL_ASSERT_NN(cctx);
+    CodecCache_free(cctx->tryGraphCodecOutputCache);
+    cctx->tryGraphCodecOutputCache         = NULL;
+    cctx->tryGraphCodecOutputCacheActive   = false;
+    cctx->tryGraphCodecOutputCacheMaxBytes = maxBytes;
+    return ZL_returnSuccess();
 }
 
 ZL_Report ZL_CCtx_setCodecOutputCache(ZL_CCtx* cctx, ZL_CodecOutputCache* cache)
 {
     ZL_ASSERT_NN(cctx);
-    cctx->codecOutputCache = cache;
+    cctx->attachedCodecOutputCache = cache;
     return ZL_returnSuccess();
+}
+
+static ZL_CodecOutputCache* CCTX_enableTryGraphCodecOutputCache(ZL_CCtx* cctx)
+{
+    ZL_ASSERT_NN(cctx);
+    if (cctx->attachedCodecOutputCache != NULL) {
+        return cctx->attachedCodecOutputCache;
+    }
+    if (cctx->tryGraphCodecOutputCacheMaxBytes == 0) {
+        return NULL;
+    }
+    if (cctx->tryGraphCodecOutputCache == NULL) {
+        cctx->tryGraphCodecOutputCache =
+                CodecCache_create(cctx->tryGraphCodecOutputCacheMaxBytes);
+        if (cctx->tryGraphCodecOutputCache != NULL) {
+            CodecCache_setStatsEnabled(
+                    cctx->tryGraphCodecOutputCache,
+                    cctx->tryGraphCodecOutputCacheStatsEnabled);
+        }
+    }
+    cctx->tryGraphCodecOutputCacheActive =
+            cctx->tryGraphCodecOutputCache != NULL;
+    if (cctx->tryGraphCodecOutputCacheActive) {
+        CodecCache_setInsertionsEnabled(cctx->tryGraphCodecOutputCache, true);
+    }
+    return cctx->tryGraphCodecOutputCache;
+}
+
+static void CCTX_disableTryGraphCodecOutputCacheInsertions(ZL_CCtx* cctx)
+{
+    ZL_ASSERT_NN(cctx);
+    if (cctx->attachedCodecOutputCache == NULL
+        && cctx->tryGraphCodecOutputCacheActive) {
+        CodecCache_setInsertionsEnabled(cctx->tryGraphCodecOutputCache, false);
+    }
+}
+
+static void CCTX_finishTryGraphCodecOutputCache(ZL_CCtx* cctx)
+{
+    ZL_ASSERT_NN(cctx);
+    ZL_ASSERT(cctx->tryGraphCodecOutputCacheActive);
+    ZL_ASSERT_NN(cctx->tryGraphCodecOutputCache);
+    cctx->tryGraphCodecOutputCacheActive = false;
 }
 
 // --------------------------
@@ -990,6 +1083,7 @@ static ZL_Report CCTX_runGraphDesc(
 {
     ZL_RESULT_DECLARE_SCOPE_REPORT(cctx);
     ZL_ASSERT_NN(cctx);
+    const bool tryGraphCacheWasActive = cctx->tryGraphCodecOutputCacheActive;
     ZL_DLOG(BLOCK,
             "CCTX_runGraphDesc on graph '%s(%zu)' with %zu inputs",
             STR_REPLACE_NULL(migd->name),
@@ -1028,6 +1122,16 @@ static ZL_Report CCTX_runGraphDesc(
     // Note: graphArena was already reset within CCTX_runGraph_internal
     ZL_free(inputsArray);
     GCTX_destroy(&graphCtx);
+
+    /* Successors currently run synchronously and depth-first inside
+     * CCTX_runGraph_internal(). Therefore a private cache activated by this
+     * graph has served the complete selected successor subtree when that call
+     * returns. If graph execution stops being depth-first, this lifetime
+     * boundary must be revisited. Cached storage remains alive until
+     * CCTX_cleanChunk() because replayed output streams reference it. */
+    if (!tryGraphCacheWasActive && cctx->tryGraphCodecOutputCacheActive) {
+        CCTX_finishTryGraphCodecOutputCache(cctx);
+    }
 
     return dgr;
 }
@@ -1333,6 +1437,12 @@ CCTX_startCompression(ZL_CCtx* cctx, const ZL_Data* inputs[], size_t nbInputs)
             ZL_Data_contentSize(inputs[0]));
     ZL_ASSERT_NN(cctx);
     ZL_ASSERT_NN(inputs);
+
+    // Clear any private cache state left by an interrupted prior compression.
+    if (cctx->tryGraphCodecOutputCache != NULL) {
+        CodecCache_reset(cctx->tryGraphCodecOutputCache);
+    }
+    cctx->tryGraphCodecOutputCacheActive = false;
 
     /* Current library limitation :
      * Compression requires attaching a Compressor.
@@ -1816,6 +1926,11 @@ CCTX_flushChunk(ZL_CCtx* cctx, const ZL_Data* inputs[], size_t nbInputs)
     cctx->currentFrameSize = frameSize;
     ++cctx->numSegments;
 
+    if (cctx->tryGraphCodecOutputCacheStatsEnabled
+        && cctx->tryGraphCodecOutputCache != NULL) {
+        CodecCache_captureCompletedStats(cctx->tryGraphCodecOutputCache);
+    }
+
     return ZL_returnValue(frameSize - startFrameSize);
 }
 
@@ -1962,6 +2077,11 @@ ZL_CCtx* CCTX_createDerivedCCtx(const ZL_CCtx* originalCCtx)
         return NULL;
     }
     GCParams_copy(&cctx->requestedGCParams, &originalCCtx->requestedGCParams);
+    cctx->attachedCodecOutputCache = CCTX_getCodecOutputCache(originalCCtx);
+    cctx->tryGraphCodecOutputCacheMaxBytes =
+            originalCCtx->tryGraphCodecOutputCacheMaxBytes;
+    cctx->tryGraphCodecOutputCacheStatsEnabled =
+            originalCCtx->tryGraphCodecOutputCacheStatsEnabled;
     return cctx;
 }
 
@@ -2065,7 +2185,7 @@ static ZL_RESULT_OF(ZL_GraphPerformance) CCTX_tryGraphInternal(
 
 ZL_RESULT_OF(ZL_GraphPerformance)
 CCTX_tryGraph(
-        const ZL_CCtx* parentCCtx,
+        ZL_CCtx* parentCCtx,
         const ZL_Input* inputs[],
         size_t numInputs,
         Arena* wkspArena,
@@ -2086,14 +2206,22 @@ CCTX_tryGraph(
     void* const dst          = ALLOC_Arena_malloc(wkspArena, dstCapacity);
     ZL_ERR_IF_NULL(dst, allocation);
 
+    // Derived contexts borrow this cache. Allocation failure only disables the
+    // optimization; it must not change tryGraph behavior.
+    (void)CCTX_enableTryGraphCodecOutputCache(parentCCtx);
+
     ZL_CCtx* cctx = CCTX_createDerivedCCtx(parentCCtx);
-    ZL_ERR_IF_NULL(cctx, allocation);
+    if (cctx == NULL) {
+        CCTX_disableTryGraphCodecOutputCacheInsertions(parentCCtx);
+        ZL_ERR(allocation);
+    }
 
     ZL_RESULT_OF(ZL_GraphPerformance)
     result = CCTX_tryGraphInternal(
             cctx, dst, dstCapacity, inputs, numInputs, graph, params);
 
     CCTX_free(cctx);
+    CCTX_disableTryGraphCodecOutputCacheInsertions(parentCCtx);
 
     return result;
 }
