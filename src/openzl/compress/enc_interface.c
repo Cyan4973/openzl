@@ -273,20 +273,33 @@ static ZL_Report ENC_replayCodecOutputCacheResult(
     ZL_RESULT_DECLARE_SCOPE_REPORT(eictx);
     for (size_t i = 0; i < result->nbOutputs; ++i) {
         const CodecCache_Output* const cached = &result->outputs[i];
-        ZL_Output* const output               = ZL_Encoder_createTypedStream(
-                eictx, cached->outcomeIndex, cached->numElts, cached->eltWidth);
-        ZL_ERR_IF_NULL(output, allocation);
+        ZL_Output* output;
+        if (cached->contentSize == 0) {
+            output = ZL_Encoder_createTypedStream(
+                    eictx,
+                    cached->outcomeIndex,
+                    cached->numElts,
+                    cached->eltWidth);
+            ZL_ERR_IF_NULL(output, allocation);
+            ZL_ERR_IF_ERR(ZL_Output_commit(output, cached->numElts));
+        } else {
+            ZL_TRY_LET(
+                    CCTX_DataPtr,
+                    stream,
+                    CCTX_refConstBufferIntoNewStream(
+                            eictx->cctx,
+                            eictx->rtnodeid,
+                            cached->outcomeIndex,
+                            cached->eltWidth,
+                            cached->numElts,
+                            cached->content));
+            output = ZL_codemodDataAsOutput(stream);
+        }
         ZL_ERR_IF_NE(
                 ZL_Output_type(output),
                 cached->type,
                 corruption,
                 "Cached codec output type does not match its output port");
-        if (cached->contentSize != 0) {
-            void* const dst = ZL_Output_ptr(output);
-            ZL_ERR_IF_NULL(dst, allocation);
-            memcpy(dst, cached->content, cached->contentSize);
-        }
-        ZL_ERR_IF_ERR(ZL_Output_commit(output, cached->numElts));
         for (size_t m = 0; m < cached->nbIntMetadata; ++m) {
             ZL_ERR_IF_ERR(ZL_Output_setIntMetadata(
                     output,
