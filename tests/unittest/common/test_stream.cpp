@@ -1,5 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+#include <cstdint>
+#include <cstring>
+
 #include <gtest/gtest.h>
 
 #include "openzl/common/stream.h"
@@ -169,6 +172,55 @@ TEST(Stream, refStream)
 
     STREAM_free(s);
     STREAM_free(ref);
+}
+
+TEST(Stream, codecCacheKeyHashTracksImmutableContent)
+{
+    ZL_Data* const stream = STREAM_create(kZeroID);
+    ASSERT_NE(stream, nullptr);
+    ZL_REQUIRE_SUCCESS(STREAM_reserve(stream, ZL_Type_numeric, 2, 3));
+    std::memset(ZL_Data_wPtr(stream), 0, 6);
+    ZL_REQUIRE_SUCCESS(ZL_Data_commit(stream, 3));
+
+    uint64_t hash = 0;
+    EXPECT_FALSE(STREAM_getCodecCacheKeyHash(stream, &hash));
+    STREAM_setCodecCacheKeyHash(stream, 11);
+    ASSERT_TRUE(STREAM_getCodecCacheKeyHash(stream, &hash));
+    EXPECT_EQ(hash, 11);
+
+    ZL_Data* const fullRef = STREAM_create(kOneID);
+    ASSERT_NE(fullRef, nullptr);
+    STREAM_setCodecCacheKeyHash(fullRef, 22);
+    ASSERT_TRUE(STREAM_getCodecCacheKeyHash(fullRef, &hash));
+    EXPECT_EQ(hash, 22);
+    ZL_REQUIRE_SUCCESS(STREAM_refStreamWithoutRefCount(fullRef, stream));
+    ASSERT_TRUE(STREAM_getCodecCacheKeyHash(fullRef, &hash));
+    EXPECT_EQ(hash, 11);
+
+    ZL_Data* const slice = STREAM_create(kOneID);
+    ASSERT_NE(slice, nullptr);
+    STREAM_setCodecCacheKeyHash(slice, 33);
+    ASSERT_TRUE(STREAM_getCodecCacheKeyHash(slice, &hash));
+    EXPECT_EQ(hash, 33);
+    ZL_REQUIRE_SUCCESS(
+            STREAM_refStreamSliceWithoutRefCount(slice, stream, 1, 2));
+    EXPECT_FALSE(STREAM_getCodecCacheKeyHash(slice, &hash));
+
+    ZL_REQUIRE_SUCCESS(ZL_Data_setIntMetadata(stream, 1, 7));
+    EXPECT_FALSE(STREAM_getCodecCacheKeyHash(stream, &hash));
+    STREAM_setCodecCacheKeyHash(stream, 11);
+    ASSERT_NE(ZL_Data_wPtr(stream), nullptr);
+    EXPECT_FALSE(STREAM_getCodecCacheKeyHash(stream, &hash));
+    STREAM_setCodecCacheKeyHash(stream, 11);
+    ZL_REQUIRE_SUCCESS(STREAM_consume(stream, 1));
+    EXPECT_FALSE(STREAM_getCodecCacheKeyHash(stream, &hash));
+    STREAM_setCodecCacheKeyHash(stream, 11);
+    STREAM_clear(stream);
+    EXPECT_FALSE(STREAM_getCodecCacheKeyHash(stream, &hash));
+
+    STREAM_free(slice);
+    STREAM_free(fullRef);
+    STREAM_free(stream);
 }
 
 TEST(Stream, copyIntMetas)

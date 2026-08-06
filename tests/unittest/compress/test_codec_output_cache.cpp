@@ -21,7 +21,6 @@
 #include "openzl/zl_codec_output_cache.h"
 #include "openzl/zl_compress.h"
 #include "openzl/zl_compressor.h"
-#include "openzl/zl_public_nodes.h"
 #include "openzl/zl_version.h"
 
 namespace {
@@ -488,6 +487,29 @@ TEST_F(CodecOutputCacheTest, DisabledInsertionsStillAllowHits)
     EXPECT_EQ(CodecCache_getStats(cache.get()).inserts, 1);
 }
 
+TEST_F(CodecOutputCacheTest, MemoizedHashCollisionStillComparesExactInputs)
+{
+    Cache cache;
+    Stream* const firstInput  = makeInput("first", 5);
+    Stream* const secondInput = makeInput("other", 5);
+    ASSERT_NE(firstInput, nullptr);
+    ASSERT_NE(secondInput, nullptr);
+    STREAM_setCodecCacheKeyHash(firstInput, 7);
+    STREAM_setCodecCacheKeyHash(secondInput, 7);
+    CodecCache_Lookup* const first =
+            lookup(cache.get(), ZL_NODE_SPARSE_NUM, firstInput);
+    ASSERT_NE(first, nullptr);
+    const CodecCache_Output output = makeOutput("A", 1);
+    const CodecCache_Result result = makeResult(&output, 1);
+    ASSERT_EQ(
+            CodecCache_store(first, &result), CodecCache_InsertResult_inserted);
+
+    CodecCache_Lookup* const second =
+            lookup(cache.get(), ZL_NODE_SPARSE_NUM, secondInput);
+    ASSERT_NE(second, nullptr);
+    EXPECT_EQ(CodecCache_Lookup_getResult(second), nullptr);
+}
+
 TEST_F(CodecOutputCacheTest, EncoderNodeNotWireTransformIdentifiesInvocation)
 {
     Cache cache;
@@ -696,13 +718,12 @@ TEST(CodecOutputCacheLifecycleTest, NullOperationsAreSafe)
     CodecCache_reset(nullptr);
 }
 
-TEST(CodecOutputCacheIntegrationTest,
-     AttachedCacheReplaysByteIdenticalCodecOutput)
+TEST(CodecOutputCacheIntegrationTest, AttachedCacheReplaysAndReusesOutputHashes)
 {
     ZL_Compressor* const compressor = ZL_Compressor_create();
     ASSERT_NE(compressor, nullptr);
-    ASSERT_FALSE(ZL_isError(
-            ZL_Compressor_selectStartingGraphID(compressor, ZL_GRAPH_ZSTD)));
+    ASSERT_FALSE(ZL_isError(ZL_Compressor_selectStartingGraphID(
+            compressor, ZL_GRAPH_RANGE_PACK_ZSTD)));
     ZL_CCtx* const cctx = ZL_CCtx_create();
     ASSERT_NE(cctx, nullptr);
     ASSERT_FALSE(ZL_isError(ZL_CCtx_refCompressor(cctx, compressor)));
@@ -715,18 +736,24 @@ TEST(CodecOutputCacheIntegrationTest,
     CodecCache_setStatsEnabled(cache, true);
     ASSERT_FALSE(ZL_isError(ZL_CCtx_setCodecOutputCache(cctx, cache)));
 
-    const std::string input(64 * 1024, 'a');
-    std::vector<char> first(ZL_compressBound(input.size()));
+    std::vector<uint32_t> input(16 * 1024);
+    for (size_t i = 0; i < input.size(); ++i) {
+        input[i] = (uint32_t)(i % 251);
+    }
+    ZL_TypedRef* const inputRef = ZL_TypedRef_createNumeric(
+            input.data(), sizeof(input[0]), input.size());
+    ASSERT_NE(inputRef, nullptr);
+    std::vector<char> first(ZL_compressBound(input.size() * sizeof(input[0])));
     std::vector<char> second(first.size());
-    const ZL_Report firstResult = ZL_CCtx_compress(
-            cctx, first.data(), first.size(), input.data(), input.size());
+    const ZL_Report firstResult = ZL_CCtx_compressTypedRef(
+            cctx, first.data(), first.size(), inputRef);
     ASSERT_FALSE(ZL_isError(firstResult));
     const CodecCache_Stats afterFirst = CodecCache_getStats(cache);
     EXPECT_GT(afterFirst.misses, 0);
     EXPECT_GT(afterFirst.inserts, 0);
 
-    const ZL_Report secondResult = ZL_CCtx_compress(
-            cctx, second.data(), second.size(), input.data(), input.size());
+    const ZL_Report secondResult = ZL_CCtx_compressTypedRef(
+            cctx, second.data(), second.size(), inputRef);
     ASSERT_FALSE(ZL_isError(secondResult));
     ASSERT_EQ(ZL_validResult(firstResult), ZL_validResult(secondResult));
     EXPECT_EQ(
@@ -735,7 +762,9 @@ TEST(CodecOutputCacheIntegrationTest,
             0);
     const CodecCache_Stats afterSecond = CodecCache_getStats(cache);
     EXPECT_GT(afterSecond.hits, afterFirst.hits);
+    EXPECT_GT(CodecCache_getHashReuses(cache), 0);
 
+    ZL_TypedRef_free(inputRef);
     ZL_CCtx_free(cctx);
     ZL_CodecOutputCache_free(cache);
     ZL_Compressor_free(compressor);
