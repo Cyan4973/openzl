@@ -326,6 +326,17 @@ ZL_Report STREAM_consume(Stream* data, size_t numElts);
  * count. */
 void STREAM_clear(Stream* s);
 
+/**
+ * Stores or retrieves a memoized codec-cache lookup hash.
+ *
+ * This hash is a performance hint. Cache hits still require exact input
+ * comparison, so a stale value may reduce cache effectiveness but cannot
+ * produce an incorrect hit. Stream APIs invalidate the hint when they may
+ * change the content view or integer metadata.
+ */
+void STREAM_setCodecCacheKeyHash(Stream* s, uint64_t hash);
+bool STREAM_getCodecCacheKeyHash(const Stream* s, uint64_t* hash);
+
 ZL_END_C_DECLS
 
 #endif /* ZSTRONG_COMMON_STREAM_H */
