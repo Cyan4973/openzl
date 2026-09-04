@@ -76,7 +76,7 @@ void TRS_numeric_kmv_track_value(
  * `TRS_numeric_kmv_track_value()` without rebuilding it. `kmv_size` must not
  * exceed `TRS_NUMERIC_KMV_K`.
  */
-uint64_t TRS_numeric_kmv_compute_gap_cv(
+uint64_t TRS_numeric_kmv_compute_gap_nmad_fp(
         TRS_NumericKmvEntry* heap,
         size_t kmv_size);
 
@@ -90,6 +90,18 @@ uint64_t TRS_numeric_kmv_compute_gap_cv(
 double TRS_numeric_compute_sorted_gap_mode(
         const uint64_t* data,
         size_t n_elements,
+        uint64_t* buffer,
+        size_t buffer_capacity);
+
+/**
+ * Return the sorted-gap mode for native-endian integer elements stored as
+ * bytes. `elt_width` must be 1, 2, 4, or 8. `buffer` must contain at least
+ * `TRS_NUMERIC_SORTED_GAP_BUFFER_ENTRIES` entries.
+ */
+double TRS_numeric_compute_sorted_gap_mode_from_bytes(
+        const uint8_t* data,
+        size_t n_elements,
+        size_t elt_width,
         uint64_t* buffer,
         size_t buffer_capacity);
 
