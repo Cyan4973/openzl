@@ -7,6 +7,10 @@
 
 #include <gtest/gtest.h>
 
+#include "openzl/codecs/zl_constant.h"
+#include "openzl/codecs/zl_zstd.h"
+#include "openzl/compress/private_nodes.h"
+#include "openzl/compress/selectors/selector_numeric.h"
 #include "openzl/compress/selectors/transformer/generated/score_numeric16.h"
 #include "openzl/compress/selectors/transformer/generated/score_numeric32.h"
 #include "openzl/compress/selectors/transformer/generated/score_numeric64.h"
@@ -598,6 +602,108 @@ TEST(TransformerDecisionTest, GeneratedOperationIdsAreValidAndUnique)
             TRS_score_num32_operation_ids, TRS_SCORE_NUM32_N_OPERATIONS);
     expectValidOperationIds(
             TRS_score_num64_operation_ids, TRS_SCORE_NUM64_N_OPERATIONS);
+}
+
+TEST(TransformerDecisionTest, OperationMaskSelectsBestSupportedGraph)
+{
+    const SI_TransformerSupportedOperations noneSupported     = {};
+    const SI_TransformerSupportedOperations constantSupported = {
+        .constant = true,
+    };
+    const SI_TransformerDecisionView constantDecision = {
+        .bestOp       = TRS_GENERIC_NUMERIC_OP_CONSTANT,
+        .bestIndex    = -1,
+        .scoreCount   = 0,
+        .scores       = nullptr,
+        .logits       = nullptr,
+        .operationIds = nullptr,
+    };
+    EXPECT_EQ(
+            SI_transformer_select_supported_graph(
+                    constantDecision, noneSupported)
+                    .gid,
+            ZL_GRAPH_TRANSFORMER_STATIC_FALLBACK.gid);
+    EXPECT_EQ(
+            SI_transformer_select_supported_graph(
+                    constantDecision, constantSupported)
+                    .gid,
+            ZL_GRAPH_CONSTANT.gid);
+
+    const std::array<TRS_GenericNumericOpId, 4> gcdOperations = {
+        TRS_GENERIC_NUMERIC_OP_DIVIDE_BY_GCD,
+        TRS_GENERIC_NUMERIC_OP_SPARSE_NUM,
+        TRS_GENERIC_NUMERIC_OP_ZSTD,
+        TRS_GENERIC_NUMERIC_OP_STORE,
+    };
+    const std::array<float, 4> gcdScores         = { 1.0f, 1.0f, 1.0f, 1.0f };
+    const std::array<float, 4> gcdLogits         = { 4.0f, 3.0f, 2.0f, 1.0f };
+    const SI_TransformerDecisionView gcdDecision = {
+        .bestOp       = TRS_GENERIC_NUMERIC_OP_DIVIDE_BY_GCD,
+        .bestIndex    = 0,
+        .scoreCount   = static_cast<int>(gcdOperations.size()),
+        .scores       = gcdScores.data(),
+        .logits       = gcdLogits.data(),
+        .operationIds = gcdOperations.data(),
+    };
+    const SI_TransformerSupportedOperations gcdSupported = {
+        .divideByGcd = true,
+        .sparseNum   = true,
+    };
+    EXPECT_EQ(
+            SI_transformer_select_supported_graph(gcdDecision, noneSupported)
+                    .gid,
+            ZL_GRAPH_ZSTD.gid);
+    EXPECT_EQ(
+            SI_transformer_select_supported_graph(gcdDecision, gcdSupported)
+                    .gid,
+            ZL_GRAPH_TRANSFORMER_DIVIDE_BY_GCD.gid);
+
+    const std::array<TRS_GenericNumericOpId, 3> sparseOperations = {
+        TRS_GENERIC_NUMERIC_OP_SPARSE_NUM,
+        TRS_GENERIC_NUMERIC_OP_ZSTD,
+        TRS_GENERIC_NUMERIC_OP_STORE,
+    };
+    const std::array<float, 3> sparseScores         = { 1.0f, 1.0f, 1.0f };
+    const std::array<float, 3> sparseLogits         = { 3.0f, 2.0f, 1.0f };
+    const SI_TransformerDecisionView sparseDecision = {
+        .bestOp       = TRS_GENERIC_NUMERIC_OP_SPARSE_NUM,
+        .bestIndex    = 0,
+        .scoreCount   = static_cast<int>(sparseOperations.size()),
+        .scores       = sparseScores.data(),
+        .logits       = sparseLogits.data(),
+        .operationIds = sparseOperations.data(),
+    };
+    const SI_TransformerSupportedOperations sparseSupported = {
+        .sparseNum = true,
+    };
+    EXPECT_EQ(
+            SI_transformer_select_supported_graph(sparseDecision, noneSupported)
+                    .gid,
+            ZL_GRAPH_ZSTD.gid);
+    EXPECT_EQ(
+            SI_transformer_select_supported_graph(
+                    sparseDecision, sparseSupported)
+                    .gid,
+            ZL_GRAPH_TRANSFORMER_SPARSE_NUM.gid);
+
+    const std::array<TRS_GenericNumericOpId, 1> unsupportedOperations = {
+        TRS_GENERIC_NUMERIC_OP_SPARSE_NUM,
+    };
+    const std::array<float, 1> unsupportedScores         = { 1.0f };
+    const std::array<float, 1> unsupportedLogits         = { 1.0f };
+    const SI_TransformerDecisionView unsupportedDecision = {
+        .bestOp       = TRS_GENERIC_NUMERIC_OP_SPARSE_NUM,
+        .bestIndex    = 0,
+        .scoreCount   = 1,
+        .scores       = unsupportedScores.data(),
+        .logits       = unsupportedLogits.data(),
+        .operationIds = unsupportedOperations.data(),
+    };
+    EXPECT_EQ(
+            SI_transformer_select_supported_graph(
+                    unsupportedDecision, noneSupported)
+                    .gid,
+            ZL_GRAPH_TRANSFORMER_STATIC_FALLBACK.gid);
 }
 
 } // namespace

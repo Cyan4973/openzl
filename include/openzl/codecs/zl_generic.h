@@ -20,7 +20,9 @@ extern "C" {
 
 // Numeric
 // Input : 1 stream of numeric data
-// Result : compresses numeric data using the default fixed-size field graph
+// Result : selects a numeric compression graph based on stream contents and
+// compression level. Levels <= 6 use the default fixed-size field graph;
+// levels 7+ use the Compression Transformer.
 #define ZL_GRAPH_NUMERIC ZL_MAKE_GRAPH_ID(ZL_StandardGraphID_select_numeric)
 
 #if defined(__cplusplus)
