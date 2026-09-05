@@ -308,10 +308,6 @@ class NumericSegmentationTest(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        import shutil
-        import struct
-        import tempfile
-
         self.tmpdir = tempfile.mkdtemp()
         self.addCleanup(lambda: shutil.rmtree(self.tmpdir, True))
 
@@ -320,19 +316,30 @@ class NumericSegmentationTest(unittest.TestCase):
         self.test_files: dict[str, dict] = {}
         target_bytes = 2 * 1000 * 1000  # 2 MB
         configs = [
-            ("u8", "B", 1, "u8"),
-            ("le-u16", "H", 2, "le-u16"),
-            ("le-i32", "i", 4, "le-i32"),
-            ("le-u64", "Q", 8, "le-u64"),
+            ("u8", "<", "B", 1),
+            ("le-u16", "<", "H", 2),
+            ("le-i32", "<", "i", 4),
+            ("le-u64", "<", "Q", 8),
+            ("be-u16", ">", "H", 2),
+            ("be-i16", ">", "h", 2),
+            ("be-u32", ">", "I", 4),
+            ("be-i32", ">", "i", 4),
+            ("be-u64", ">", "Q", 8),
+            ("be-i64", ">", "q", 8),
         ]
-        for profile, fmt, elt_size, name in configs:
+        for profile, endian, fmt, elt_size in configs:
             n = target_bytes // elt_size
-            max_val = 2 ** (elt_size * 8)
-            data = struct.pack(f"<{n}{fmt}", *[i % max_val for i in range(n)])
-            path = os.path.join(self.tmpdir, f"{name}.bin")
+            if fmt.islower():
+                max_val = 2 ** (elt_size * 8 - 1)
+                values = [(i % max_val) - max_val // 2 for i in range(n)]
+            else:
+                max_val = 2 ** (elt_size * 8)
+                values = [i % max_val for i in range(n)]
+            data = struct.pack(f"{endian}{n}{fmt}", *values)
+            path = os.path.join(self.tmpdir, f"{profile}.bin")
             with open(path, "wb") as f:
                 f.write(data)
-            self.test_files[name] = {
+            self.test_files[profile] = {
                 "path": path,
                 "profile": profile,
                 "size": len(data),
