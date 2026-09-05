@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include "openzl/compress/selectors/transformer/cardinality.h"
+#include "openzl/compress/selectors/transformer/numeric_extract.h"
 #include "openzl/compress/selectors/transformer/numeric_stats.h"
 #include "openzl/shared/mem.h"
 #include "openzl/shared/xxhash.h"
@@ -21,6 +22,20 @@ const uint8_t* bytes(const std::array<T, Size>& values)
 {
     return reinterpret_cast<const uint8_t*>(values.data());
 }
+
+struct LegacyExtractScratch {
+    std::array<TRS_NumericKmvEntry, TRS_NUMERIC_KMV_K> kmvEntries = {};
+    std::array<uint64_t, TRS_NUMERIC_CARDINALITY_SCRATCH_WORDS>
+            cardinalityBitmap = {};
+
+    void attach(TRS_NumericExtractWorkspace& workspace)
+    {
+        workspace.kmv_entries                 = kmvEntries.data();
+        workspace.kmv_capacity                = kmvEntries.size();
+        workspace.cardinality_bitmap          = cardinalityBitmap.data();
+        workspace.cardinality_bitmap_capacity = cardinalityBitmap.size();
+    }
+};
 
 uint64_t hashLittleEndianU64(uint64_t value)
 {
@@ -70,6 +85,209 @@ double computeSortedGapMode(const std::vector<uint64_t>& values)
     EXPECT_EQ(storage.front(), canary);
     EXPECT_EQ(storage.back(), canary);
     return result;
+}
+
+TEST(TransformerFeaturesTest, EmptyInputKeepsWidthMetadata)
+{
+    for (const int width : { 1, 2, 4, 8 }) {
+        SCOPED_TRACE(width);
+        TRS_NumericFeatures features;
+        ASSERT_TRUE(TRS_numericFeatures_extract_from_bytes(
+                &features, nullptr, 0, width, nullptr));
+        EXPECT_EQ(features.count, 0);
+        EXPECT_EQ(features.elt_width, width);
+        EXPECT_EQ(features.min_u, 0);
+        EXPECT_EQ(features.max_u, 0);
+        EXPECT_EQ(features.cardinality_est, 0);
+    }
+}
+
+TEST(TransformerFeaturesTest, PreservesSignedAndUnsignedViews)
+{
+    const std::array<uint16_t, 4> values = {
+        0,
+        std::numeric_limits<int16_t>::max(),
+        uint16_t{ 1 } << 15,
+        std::numeric_limits<uint16_t>::max(),
+    };
+
+    std::array<uint32_t, values.size()> scratchValues                 = {};
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    LegacyExtractScratch extractScratch;
+    TRS_NumericExtractWorkspace workspace = {
+        .values          = scratchValues.data(),
+        .capacity        = scratchValues.size(),
+        .match4_table    = matchTable.data(),
+        .match4_capacity = matchTable.size(),
+    };
+    extractScratch.attach(workspace);
+
+    TRS_NumericFeatures features;
+    ASSERT_TRUE(TRS_numericFeatures_extract_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            &workspace));
+
+    EXPECT_EQ(features.count, values.size());
+    EXPECT_EQ(features.min_u, 0);
+    EXPECT_EQ(features.max_u, std::numeric_limits<uint16_t>::max());
+    EXPECT_EQ(features.sum_u, 131070);
+    EXPECT_EQ(features.min_s, std::numeric_limits<int16_t>::min());
+    EXPECT_EQ(features.max_s, std::numeric_limits<int16_t>::max());
+    EXPECT_EQ(features.sum_s, -2);
+    EXPECT_EQ(features.range_u, std::numeric_limits<uint16_t>::max());
+    EXPECT_EQ(features.range_s, std::numeric_limits<uint16_t>::max());
+    EXPECT_EQ(features.zero_count, 1);
+    EXPECT_EQ(features.delta_up_count, 3);
+    EXPECT_EQ(features.delta_down_count, 0);
+}
+
+TEST(TransformerFeaturesTest, RejectsMissingOrUndersizedWorkspace)
+{
+    const std::array<uint16_t, 4> values = { 1, 2, 3, 4 };
+    TRS_NumericFeatures features;
+
+    EXPECT_FALSE(TRS_numericFeatures_extract_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            nullptr));
+
+    std::array<uint32_t, values.size() - 1> scratchValues             = {};
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    LegacyExtractScratch extractScratch;
+    TRS_NumericExtractWorkspace workspace = {
+        .values          = scratchValues.data(),
+        .capacity        = scratchValues.size(),
+        .match4_table    = matchTable.data(),
+        .match4_capacity = matchTable.size(),
+    };
+    extractScratch.attach(workspace);
+    EXPECT_FALSE(TRS_numericFeatures_extract_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            &workspace));
+
+    workspace.capacity        = values.size();
+    workspace.match4_capacity = matchTable.size() - 1;
+    EXPECT_FALSE(TRS_numericFeatures_extract_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            &workspace));
+
+    workspace.match4_capacity = matchTable.size();
+    workspace.kmv_capacity    = TRS_NUMERIC_KMV_K - 1;
+    EXPECT_FALSE(TRS_numericFeatures_extract_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            &workspace));
+
+    workspace.kmv_capacity = TRS_NUMERIC_KMV_K;
+    workspace.cardinality_bitmap_capacity =
+            TRS_CARDINALITY_U16_BITMAP_WORDS - 1;
+    EXPECT_FALSE(TRS_numericFeatures_extract_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            &workspace));
+}
+
+template <typename T>
+void expectLegacyExtractionSupportsWidth()
+{
+    const std::array<T, 6> values                     = { 0, 1, 2, 3, 2, 1 };
+    const std::array<uint64_t, 6> widenedValues       = { 0, 1, 2, 3, 2, 1 };
+    std::array<uint32_t, values.size()> scratchValues = {};
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    LegacyExtractScratch extractScratch;
+    TRS_NumericExtractWorkspace workspace = {
+        .values          = scratchValues.data(),
+        .capacity        = scratchValues.size(),
+        .match4_table    = matchTable.data(),
+        .match4_capacity = matchTable.size(),
+    };
+    extractScratch.attach(workspace);
+
+    TRS_NumericFeatures fromWidened;
+    ASSERT_TRUE(TRS_numericFeatures_extract(
+            &fromWidened,
+            widenedValues.data(),
+            widenedValues.size(),
+            sizeof(T),
+            &workspace));
+    EXPECT_EQ(fromWidened.count, values.size());
+    EXPECT_EQ(fromWidened.elt_width, sizeof(T));
+    EXPECT_EQ(fromWidened.min_u, 0);
+    EXPECT_EQ(fromWidened.max_u, 3);
+    EXPECT_EQ(fromWidened.sum_u, 9);
+    EXPECT_EQ(fromWidened.min_s, 0);
+    EXPECT_EQ(fromWidened.max_s, 3);
+    EXPECT_EQ(fromWidened.sum_s, 9);
+    EXPECT_EQ(fromWidened.zero_count, 1);
+    EXPECT_EQ(fromWidened.delta_up_count, 3);
+    EXPECT_EQ(fromWidened.delta_down_count, 2);
+    EXPECT_EQ(fromWidened.match4, 0);
+    EXPECT_EQ(fromWidened.d8_cardinality_est, 0);
+
+    TRS_NumericFeatures fromBytes;
+    ASSERT_TRUE(TRS_numericFeatures_extract_from_bytes(
+            &fromBytes, bytes(values), sizeof(values), sizeof(T), &workspace));
+    EXPECT_EQ(fromBytes.count, fromWidened.count);
+    EXPECT_EQ(fromBytes.elt_width, fromWidened.elt_width);
+    EXPECT_EQ(fromBytes.min_u, fromWidened.min_u);
+    EXPECT_EQ(fromBytes.max_u, fromWidened.max_u);
+    EXPECT_EQ(fromBytes.sum_u, fromWidened.sum_u);
+    EXPECT_EQ(fromBytes.min_s, fromWidened.min_s);
+    EXPECT_EQ(fromBytes.max_s, fromWidened.max_s);
+    EXPECT_EQ(fromBytes.sum_s, fromWidened.sum_s);
+    EXPECT_EQ(fromBytes.zero_count, fromWidened.zero_count);
+    EXPECT_EQ(fromBytes.delta_up_count, fromWidened.delta_up_count);
+    EXPECT_EQ(fromBytes.delta_down_count, fromWidened.delta_down_count);
+}
+
+TEST(TransformerFeaturesTest, LegacyExtractionSupportsAllWidths)
+{
+    expectLegacyExtractionSupportsWidth<uint8_t>();
+    expectLegacyExtractionSupportsWidth<uint16_t>();
+    expectLegacyExtractionSupportsWidth<uint32_t>();
+    expectLegacyExtractionSupportsWidth<uint64_t>();
+}
+
+TEST(TransformerFeaturesTest, WidenedExtractionEnforcesWorkspaceContract)
+{
+    const std::array<uint64_t, 4> values = { 1, 2, 3, 4 };
+    TRS_NumericFeatures features;
+
+    EXPECT_FALSE(TRS_numericFeatures_extract(
+            &features, values.data(), values.size(), 2, nullptr));
+
+    std::array<uint32_t, values.size() - 1> scratchValues = {};
+    LegacyExtractScratch extractScratch;
+    TRS_NumericExtractWorkspace workspace = {
+        .values   = scratchValues.data(),
+        .capacity = scratchValues.size(),
+    };
+    extractScratch.attach(workspace);
+    EXPECT_FALSE(TRS_numericFeatures_extract(
+            &features, values.data(), values.size(), 2, &workspace));
+
+    EXPECT_TRUE(TRS_numericFeatures_extract(
+            &features, values.data(), values.size(), 8, nullptr));
+    EXPECT_EQ(features.count, values.size());
+
+    EXPECT_TRUE(TRS_numericFeatures_extract(&features, nullptr, 0, 4, nullptr));
+    EXPECT_EQ(features.count, 0);
+    EXPECT_EQ(features.elt_width, 4);
 }
 
 TEST(TransformerFeaturesTest, CardinalityCountsSmallDistinctSet)
@@ -250,6 +468,24 @@ TEST(TransformerFeaturesTest, NumericStatisticsEncodeDoubleFpBoundary)
             TRS_numeric_encode_double_fp(below), UINT64_MAX - uint64_t{ 2047 });
     EXPECT_EQ(TRS_numeric_encode_double_fp(saturationInput), UINT64_MAX);
     EXPECT_EQ(TRS_numeric_encode_double_fp(above), UINT64_MAX);
+}
+
+TEST(TransformerFeaturesTest, Num8UsesCallerProvidedMatchTable)
+{
+    const std::array<uint8_t, 8> data = {
+        'a', 'b', 'c', 'd', 'a', 'b', 'c', 'd'
+    };
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    LegacyExtractScratch extractScratch;
+    TRS_NumericExtractWorkspace workspace = {};
+    workspace.match4_table                = matchTable.data();
+    workspace.match4_capacity             = matchTable.size();
+    extractScratch.attach(workspace);
+    TRS_NumericFeatures features;
+
+    ASSERT_TRUE(TRS_numericFeatures_extract_from_bytes(
+            &features, data.data(), data.size(), 1, &workspace));
+    EXPECT_EQ(features.match4, 1);
 }
 
 TEST(TransformerFeaturesTest, CanonicalHashesMatchTrainingFeatureContract)
