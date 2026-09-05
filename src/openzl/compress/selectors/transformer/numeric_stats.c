@@ -16,6 +16,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "openzl/common/assertion.h"
+
 /* These band limits are part of the trained sorted-gap feature contract. */
 #define TRS_SORTED_GAP_MAX_VALUES 512
 #define TRS_SORTED_GAP_KEEP_WIDTH 384
@@ -87,7 +89,7 @@ static int kmv_entry_cmp(const void* a, const void* b)
     return (va > vb) - (va < vb);
 }
 
-uint64_t TRS_numeric_kmv_compute_gap_cv(
+uint64_t TRS_numeric_kmv_compute_gap_nmad_fp(
         TRS_NumericKmvEntry* heap,
         size_t kmv_size)
 {
@@ -228,6 +230,35 @@ static size_t gap_frequency_in_suffix(
     return frequency;
 }
 
+static double compute_sorted_gap_mode(
+        const uint64_t* smallest,
+        size_t n_smallest)
+{
+    size_t const width   = n_smallest < TRS_SORTED_GAP_KEEP_WIDTH
+              ? n_smallest
+              : TRS_SORTED_GAP_KEEP_WIDTH;
+    size_t const start   = n_smallest - width;
+    size_t max_gap_count = 0;
+
+    if (width < 2)
+        return 0.0;
+
+    /*
+     * The retained band contains at most 383 gaps. This bounded quadratic
+     * scan avoids adding a hash table or allocation to selector feature
+     * extraction. The earliest occurrence of each gap sees every later match,
+     * so the maximum suffix frequency is the exact mode frequency.
+     */
+    for (size_t i = start + 1; i < n_smallest; i++) {
+        size_t const gap_count =
+                gap_frequency_in_suffix(smallest, i, n_smallest);
+        if (gap_count > max_gap_count)
+            max_gap_count = gap_count;
+    }
+
+    return (double)max_gap_count / (double)(width - 1);
+}
+
 double TRS_numeric_compute_sorted_gap_mode(
         const uint64_t* data,
         size_t n_elements,
@@ -257,29 +288,77 @@ double TRS_numeric_compute_sorted_gap_mode(
     if (accumulator.pending_count != 0)
         sorted_gap_flush(&accumulator);
 
-    size_t const width = accumulator.retained_count < TRS_SORTED_GAP_KEEP_WIDTH
-            ? accumulator.retained_count
-            : TRS_SORTED_GAP_KEEP_WIDTH;
-    size_t const start = accumulator.retained_count - width;
-    size_t max_gap_count = 0;
+    return compute_sorted_gap_mode(
+            accumulator.retained_values, accumulator.retained_count);
+}
 
-    if (width < 2)
+static uint64_t
+load_unsigned_value(const uint8_t* data, size_t index, size_t elt_width)
+{
+    const uint8_t* const src = data + index * elt_width;
+    switch (elt_width) {
+        case 1:
+            return src[0];
+        case 2: {
+            uint16_t value;
+            memcpy(&value, src, sizeof(value));
+            return value;
+        }
+        case 4: {
+            uint32_t value;
+            memcpy(&value, src, sizeof(value));
+            return value;
+        }
+        case 8: {
+            uint64_t value;
+            memcpy(&value, src, sizeof(value));
+            return value;
+        }
+        default:
+            return 0;
+    }
+}
+
+double TRS_numeric_compute_sorted_gap_mode_from_bytes(
+        const uint8_t* data,
+        size_t n_elements,
+        size_t elt_width,
+        uint64_t* buffer,
+        size_t buffer_capacity)
+{
+    ZL_ASSERT(n_elements == 0 || data != NULL);
+    ZL_ASSERT(
+            elt_width == 1 || elt_width == 2 || elt_width == 4
+            || elt_width == 8);
+    if ((n_elements != 0 && data == NULL)
+        || (elt_width != 1 && elt_width != 2 && elt_width != 4
+            && elt_width != 8)) {
+        return 0.0;
+    }
+    ZL_ASSERT(n_elements == 0 || buffer != NULL);
+    ZL_ASSERT(
+            n_elements == 0
+            || buffer_capacity >= TRS_NUMERIC_SORTED_GAP_BUFFER_ENTRIES);
+    if (n_elements == 0)
         return 0.0;
 
-    /*
-     * The retained band contains at most 383 gaps. This bounded quadratic
-     * scan avoids adding a hash table or allocation to selector feature
-     * extraction. The earliest occurrence of each gap sees every later match,
-     * so the maximum suffix frequency is the exact mode frequency.
-     */
-    for (size_t i = start + 1; i < accumulator.retained_count; i++) {
-        size_t const gap_count = gap_frequency_in_suffix(
-                accumulator.retained_values, i, accumulator.retained_count);
-        if (gap_count > max_gap_count)
-            max_gap_count = gap_count;
-    }
+    SortedGapAccumulator accumulator = {
+        .retained_values = buffer,
+        .pending_values  = buffer + TRS_SORTED_GAP_MAX_VALUES,
+        .output_values   = buffer + TRS_SORTED_GAP_MAX_VALUES
+                + TRS_SORTED_GAP_BATCH_VALUES,
+        .retained_count = 0,
+        .pending_count  = 0,
+    };
 
-    return (double)max_gap_count / (double)(width - 1);
+    for (size_t i = 0; i < n_elements; i++) {
+        sorted_gap_add(&accumulator, load_unsigned_value(data, i, elt_width));
+    }
+    if (accumulator.pending_count != 0)
+        sorted_gap_flush(&accumulator);
+
+    return compute_sorted_gap_mode(
+            accumulator.retained_values, accumulator.retained_count);
 }
 
 static uint32_t
