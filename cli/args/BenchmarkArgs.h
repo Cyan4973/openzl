@@ -72,6 +72,11 @@ struct BenchmarkArgs : public GlobalArgs, public ProfileArgs {
             tools::io::InputFile bundleInput(dictBundlePath.value());
             dictBundleData = bundleInput.contents();
         }
+        auto levelArg = parsed.cmdFlag(cmd(), kLevel);
+        if (levelArg) {
+            level = util::checkedstoiExact(levelArg.value());
+            setRequestedCompressionLevel(level.value());
+        }
         setCompressor(createCompressorFromArgs(
                 *this, parsed.cmdFlag(cmd(), kCompressor), dictBundleData));
         auto inputPath = parsed.cmdPositional(Cmd::BENCHMARK, kInput);
@@ -86,10 +91,6 @@ struct BenchmarkArgs : public GlobalArgs, public ProfileArgs {
         if (outputCsvPath) {
             outputCsv = std::make_unique<tools::io::OutputFile>(
                     std::move(outputCsvPath).value());
-        }
-        auto levelArg = parsed.cmdFlag(cmd(), kLevel);
-        if (levelArg) {
-            level = util::checkedstoiExact(levelArg.value());
         }
         auto numItersArg = parsed.cmdFlag(cmd(), kNumIters);
         if (numItersArg) {

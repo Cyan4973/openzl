@@ -408,13 +408,15 @@ class CompressionLevelTest(unittest.TestCase):
         level: int,
         extra_args: str = "",
         output_suffix: str = "",
+        input_path: str | None = None,
     ) -> str:
+        source_path = input_path or self.input_path
         compressed_path = os.path.join(
             self.tmpdir, f"{profile}-level-{level}{output_suffix}.zl"
         )
         decompressed_path = compressed_path + ".rt"
         execute_compress(
-            file_to_compress_path=self.input_path,
+            file_to_compress_path=source_path,
             compressor_info=CompressorInfo(
                 compressor_str=profile,
                 compressor_type=CompressorType.PROFILE,
@@ -426,7 +428,7 @@ class CompressionLevelTest(unittest.TestCase):
             compressed_file_path=compressed_path,
             decompressed_file_path=decompressed_path,
         )
-        self.assertTrue(file_contents_match(self.input_path, decompressed_path))
+        self.assertTrue(file_contents_match(source_path, decompressed_path))
         return compressed_path
 
     def test_compression_level(self) -> None:
@@ -447,6 +449,27 @@ class CompressionLevelTest(unittest.TestCase):
             os.path.getsize(numeric_level_7_trained),
             os.path.getsize(numeric_level_7),
         )
+
+        sao_path = os.path.join(self.tmpdir, "sao.bin")
+        with open(sao_path, "wb") as sao_file:
+            sao_file.write(bytes(28))
+            for i in range(16384):
+                sao_file.write(
+                    struct.pack(
+                        "<dd2shff",
+                        i / 8192.0,
+                        (i % 4096) / 2048.0 - 1.0,
+                        (b"G2", b"K1", b"M0")[i % 3],
+                        (i % 3000) - 1500,
+                        (i % 1024) / 1024.0,
+                        -((i % 2048) / 2048.0),
+                    )
+                )
+        sao_level_6 = self._compress_and_round_trip("sao", 6, input_path=sao_path)
+        sao_level_7 = self._compress_and_round_trip("sao", 7, input_path=sao_path)
+        with open(sao_level_6, "rb") as level_6_file:
+            with open(sao_level_7, "rb") as level_7_file:
+                self.assertNotEqual(level_6_file.read(), level_7_file.read())
 
         invalid_output = os.path.join(self.tmpdir, "invalid-level.zl")
         self.assertNotEqual(
