@@ -259,6 +259,8 @@ typedef enum {
 
 #define ZL_GRAPH_COMPRESS1        (ZL_GraphID){ZL_PrivateStandardGraphID_compress1}
 #define ZL_GRAPH_SERIAL_COMPRESS  (ZL_GraphID){ZL_PrivateStandardGraphID_serial_compress}
+/* Compatibility adapter for generic compression and numeric segmenters.
+ * New numeric paths should use the public ZL_GRAPH_NUMERIC directly. */
 #define ZL_GRAPH_NUMERIC_COMPRESS (ZL_GraphID){ZL_PrivateStandardGraphID_numeric_compress}
 #define ZL_GRAPH_STRUCT_COMPRESS  (ZL_GraphID){ZL_PrivateStandardGraphID_struct_compress}
 #define ZL_GRAPH_STRING_COMPRESS  (ZL_GraphID){ZL_PrivateStandardGraphID_string_compress} // Generic Selector
