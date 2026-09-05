@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 #include "cardinality.h"
+#include "numeric_stats.h"
 
 #include "openzl/shared/bits.h"
 #include "openzl/shared/estimate.h"
@@ -101,21 +102,13 @@ static uint64_t d8_hash(void* state, size_t index)
     return XXH3_64bits(array->data + index, 8);
 }
 
-static uint8_t canonical_numeric_byte(
-        const NumericByteHashState* state,
-        size_t index)
-{
-    size_t const byte_in_element = index % state->elt_width;
-    size_t const element_start   = index - byte_in_element;
-    return state->data[element_start + state->elt_width - byte_in_element - 1];
-}
-
 static uint64_t d8_hash_big_endian(void* state, size_t index)
 {
     const NumericByteHashState* array = (const NumericByteHashState*)state;
     uint8_t window[8];
     for (size_t i = 0; i < sizeof(window); ++i) {
-        window[i] = canonical_numeric_byte(array, index + i);
+        window[i] = TRS_numeric_canonical_byte_from_big_endian(
+                array->data, index + i, array->elt_width);
     }
     return XXH3_64bits(window, sizeof(window));
 }
