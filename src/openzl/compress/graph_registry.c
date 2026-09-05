@@ -204,7 +204,7 @@ const InternalGraphDesc GR_standardGraphs[ZL_PrivateStandardGraphID_end] = {
     REGISTER_SELECTOR(ZL_PrivateStandardGraphID_compress1, "!zl.private.compress2", SI_selector_compress, ZL_Type_any, 200),
     REGISTER_SELECTOR(ZL_PrivateStandardGraphID_serial_compress, "!zl.private.serial_compress", SI_selector_compress_serial, ZL_Type_serial, 200),
     REGISTER_SELECTOR(ZL_PrivateStandardGraphID_struct_compress, "!zl.private.struct_compress", SI_selector_compress_struct, ZL_Type_struct, 200),
-    REGISTER_SELECTOR(ZL_PrivateStandardGraphID_numeric_compress, "!zl.private.numeric_compress", SI_selector_compress_numeric, ZL_Type_numeric, 200),
+    REGISTER_SELECTOR(ZL_PrivateStandardGraphID_numeric_compress, "!zl.private.numeric_compress", SI_selector_compress_numeric, ZL_Type_numeric, TRANSFORMER_NUMERIC_MIN_LIBRARY_VERSION),
     REGISTER_SELECTOR(ZL_PrivateStandardGraphID_string_compress, "!zl.private.string_compress", SI_selector_compress_string, ZL_Type_string, 200),
     REGISTER_STATIC_GRAPH(ZL_PrivateStandardGraphID_string_separate_compress, "!zl.private.string_separate_compress", ZL_Type_string, ZL_StandardNodeID_separate_string_components, _2_SUCCESSORS(ZL_PrivateStandardGraphID_serial_compress, ZL_PrivateStandardGraphID_numeric_compress), 200 ),
 

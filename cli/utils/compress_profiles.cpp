@@ -9,6 +9,7 @@
 #include <limits>
 
 #include "openzl/codecs/zl_conversion.h"
+#include "openzl/codecs/zl_generic.h"
 #include "openzl/codecs/zl_mlselector.h"
 #include "openzl/codecs/zl_sddl2.h"
 #include "openzl/codecs/zl_segmenters.h"
@@ -173,10 +174,16 @@ buildIntProfile(ZL_Compressor* comp, void* opaque, const ProfileArgs& args)
     if (!opaque) {
         return ZL_GRAPH_ILLEGAL;
     }
-    const auto& d = *static_cast<const IntProfileData*>(opaque);
-    size_t chunkSize =
+    const auto& d         = *static_cast<const IntProfileData*>(opaque);
+    const size_t bitWidth = d.eltByteWidth * 8;
+    ZL_GraphID graph      = ZL_GRAPH_NUMERIC;
+    graph                 = ZL_Compressor_buildACEGraphWithDefault(comp, graph);
+    graph                 = ZL_Compressor_registerStaticGraph_fromNode1o(
+            comp, ZL_Node_interpretAsLE(bitWidth), graph);
+    const size_t chunkSize =
             args.chunkSize().value_or(ZL_DEFAULT_SEGMENTER_CHUNK_BYTE_SIZE);
-    return profiles::buildIntGraph(comp, d.eltByteWidth, false, chunkSize);
+    return ZL_Compressor_buildNumFromSerialSegmenter(
+            comp, d.eltByteWidth, chunkSize, graph);
 }
 
 static void addIntProfile(
