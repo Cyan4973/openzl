@@ -308,10 +308,6 @@ class NumericSegmentationTest(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        import shutil
-        import struct
-        import tempfile
-
         self.tmpdir = tempfile.mkdtemp()
         self.addCleanup(lambda: shutil.rmtree(self.tmpdir, True))
 
@@ -320,30 +316,46 @@ class NumericSegmentationTest(unittest.TestCase):
         self.test_files: dict[str, dict] = {}
         target_bytes = 2 * 1000 * 1000  # 2 MB
         configs = [
-            ("u8", "B", 1, "u8"),
-            ("le-u16", "H", 2, "le-u16"),
-            ("le-i32", "i", 4, "le-i32"),
-            ("le-u64", "Q", 8, "le-u64"),
+            ("u8", "<", "B", 1),
+            ("le-u16", "<", "H", 2),
+            ("le-i32", "<", "i", 4),
+            ("le-u32", "<", "I", 4),
+            ("le-u64", "<", "Q", 8),
+            ("be-u16", ">", "H", 2),
+            ("be-i16", ">", "h", 2),
+            ("be-u32", ">", "I", 4),
+            ("be-i32", ">", "i", 4),
+            ("be-u64", ">", "Q", 8),
+            ("be-i64", ">", "q", 8),
         ]
-        for profile, fmt, elt_size, name in configs:
+        for profile, endian, fmt, elt_size in configs:
             n = target_bytes // elt_size
-            max_val = 2 ** (elt_size * 8)
-            data = struct.pack(f"<{n}{fmt}", *[i % max_val for i in range(n)])
-            path = os.path.join(self.tmpdir, f"{name}.bin")
+            if fmt.islower():
+                max_val = 2 ** (elt_size * 8 - 1)
+                values = [(i % max_val) - max_val // 2 for i in range(n)]
+            else:
+                max_val = 2 ** (elt_size * 8)
+                values = [i % max_val for i in range(n)]
+            data = struct.pack(f"{endian}{n}{fmt}", *values)
+            path = os.path.join(self.tmpdir, f"{profile}.bin")
             with open(path, "wb") as f:
                 f.write(data)
-            self.test_files[name] = {
+            self.test_files[profile] = {
                 "path": path,
                 "profile": profile,
                 "size": len(data),
             }
 
     def _round_trip(
-        self, profile: str, input_path: str, extra_args: str | None = None
-    ) -> None:
+        self,
+        profile: str,
+        input_path: str,
+        extra_args: str | None = None,
+        output_suffix: str = "",
+    ) -> str:
         """Compress, decompress, and verify round-trip for a single file."""
-        compressed_path = input_path + ".zl"
-        decompressed_path = input_path + ".rt"
+        compressed_path = input_path + output_suffix + ".zl"
+        decompressed_path = input_path + output_suffix + ".rt"
 
         compressor_info = CompressorInfo(
             compressor_str=profile,
@@ -359,18 +371,57 @@ class NumericSegmentationTest(unittest.TestCase):
             compressed_file_path=compressed_path,
             decompressed_file_path=decompressed_path,
         )
-        from file_utils import file_contents_match
-
         self.assertTrue(
             file_contents_match(input_path, decompressed_path),
             f"Round-trip failed for profile {profile} on {input_path}",
         )
+        return compressed_path
 
     def test_numeric_profiles_roundtrip(self) -> None:
         """Test that all numeric profiles compress and decompress correctly."""
         for name, info in self.test_files.items():
             with self.subTest(profile=name):
                 self._round_trip(info["profile"], info["path"])
+
+    def test_numeric_profiles_compress_at_level_7(self) -> None:
+        """Test that level 7 applies useful numeric compression."""
+        for profile in ("le-u32", "be-u32"):
+            info = self.test_files[profile]
+            with self.subTest(profile=profile):
+                compressed_path = self._round_trip(
+                    info["profile"],
+                    info["path"],
+                    extra_args="--level 7",
+                    output_suffix=".level7",
+                )
+                self.assertLess(
+                    os.path.getsize(compressed_path),
+                    info["size"],
+                    f"{profile} stored rather than compressed the numeric input",
+                )
+
+    def test_equivalent_endianness_has_matching_compressed_size(self) -> None:
+        """Test equivalent LE and BE inputs produce equal compressed sizes."""
+        level7_outputs: dict[str, str] = {}
+        for profile in ("le-u32", "be-u32"):
+            info = self.test_files[profile]
+            with self.subTest(profile=profile):
+                compressed_path = self._round_trip(
+                    info["profile"],
+                    info["path"],
+                    extra_args="--level 7",
+                    output_suffix=".level7.parity",
+                )
+                level7_outputs[profile] = compressed_path
+
+        # This compares whole-frame sizes and therefore relies on the current
+        # format using equal-sized encodings for the LE and BE interpretation
+        # nodes. Compare payload sizes instead if a stable API exposes them.
+        self.assertEqual(
+            os.path.getsize(level7_outputs["le-u32"]),
+            os.path.getsize(level7_outputs["be-u32"]),
+            "Equivalent little- and big-endian inputs compressed differently",
+        )
 
     def test_numeric_profiles_with_chunk_size(self) -> None:
         """Test numeric profiles with --chunk-size 1M on 2MB data (forces 2 chunks)."""
