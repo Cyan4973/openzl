@@ -65,14 +65,12 @@ BufferPtr allocBuffer(size_t size)
 struct Profile {
     const char* name;
     size_t eltByteWidth;
-    bool isSigned;
 };
 
 // Indexed by openzl_wasm_Profile ordering must match
 constexpr Profile kProfiles[OPENZL_WASM_PROFILE_COUNT] = {
-    { "serial", 0, false }, { "u8", 1, false },  { "i8", 1, true },
-    { "u16", 2, false },    { "i16", 2, true },  { "u32", 4, false },
-    { "i32", 4, true },     { "u64", 8, false }, { "i64", 8, true },
+    { "serial", 0 }, { "u8", 1 },  { "i8", 1 },  { "u16", 2 }, { "i16", 2 },
+    { "u32", 4 },    { "i32", 4 }, { "u64", 8 }, { "i64", 8 },
 };
 
 ZL_ErrorCode buildProfileCompressor(
@@ -104,7 +102,7 @@ ZL_ErrorCode buildProfileCompressor(
             : openzl::profiles::buildIntGraph(
                       comp.get(),
                       profileDef.eltByteWidth,
-                      profileDef.isSigned,
+                      ZL_Node_interpretAsLE(profileDef.eltByteWidth * 8),
                       ZL_DEFAULT_SEGMENTER_CHUNK_BYTE_SIZE);
     if (!ZL_GraphID_isValid(graph)) {
         return ZL_ErrorCode_graph_invalid;
