@@ -18,8 +18,9 @@ using namespace tools::logger;
 const uint64_t kDefaultMaxSingleSampleSize = 150 * 1024 * 1024; /* 150MiB */
 const uint64_t kDefaultMaxTotalSize        = 300 * 1024 * 1024; /* 300MiB */
 
-int cmdTrain(const TrainArgs& args)
+CmdTrainResult cmdTrainWithResult(const TrainArgs& args)
 {
+    CmdTrainResult result{};
     if (!args.output) {
         throw InvalidArgsException(
                 "No output specified. Please provide a path to save the trained compressor to.");
@@ -87,11 +88,17 @@ int cmdTrain(const TrainArgs& args)
     // Benchmark the untrained compressor
     BenchmarkArgs benchmarkArgs(args, args.compressor());
     benchmarkArgs.inputs = training::inputSetToMultiInputs(*filteredInputsPtr);
+    benchmarkArgs.dictBundleData = args.dictBundleData;
     Logger::log(INFO, "Benchmarking untrained compressor...");
     auto untrainedBenchmark = runCompressionBenchmarks(benchmarkArgs);
 
     auto serializedTrainedCompressors = openzl::training::train(
             benchmarkArgs.inputs, *args.compressor(), args.trainParams);
+    if (!args.trainParams.paretoFrontier
+        && serializedTrainedCompressors.size() != 1) {
+        throw std::logic_error(
+                "Non-Pareto training must produce exactly one compressor");
+    }
 
     poly::optional<tools::io::OutputFile> resultsCsv;
     if (args.trainParams.paretoFrontier) {
@@ -118,10 +125,10 @@ int cmdTrain(const TrainArgs& args)
         }
 
         // Benchmark the trained compressor
-        benchmarkArgs.setCompressor(
-                custom_parsers::createCompressorFromSerialized(
-                        candidate.serializedCompressor, fatBundle));
-        benchmarkArgs.dictBundleData = fatBundle;
+        benchmarkArgs.setCompressor(args.trainParams.compressorGenFunc(
+                candidate.serializedCompressor, fatBundle));
+        benchmarkArgs.dictBundleData =
+                fatBundle.empty() ? args.dictBundleData : fatBundle;
 
         if (!args.trainParams.paretoFrontier) {
             Logger::log(INFO, "Benchmarking trained compressor...");
@@ -168,9 +175,9 @@ int cmdTrain(const TrainArgs& args)
                 bundleOutput.close();
             }
         } else {
-            if (i != 0) {
-                throw std::logic_error("Must only have one trained compressor");
-            }
+            result.trainedCompressorImprovesRatio =
+                    trainedBenchmark.compressionRatio
+                    > untrainedBenchmark.compressionRatio;
             // Output file is already open
             args.output->write(candidate.serializedCompressor);
             args.output->close();
@@ -190,6 +197,12 @@ int cmdTrain(const TrainArgs& args)
         resultsCsv->close();
     }
 
+    return result;
+}
+
+int cmdTrain(const TrainArgs& args)
+{
+    (void)cmdTrainWithResult(args);
     return 0;
 }
 

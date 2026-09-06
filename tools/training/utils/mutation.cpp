@@ -40,11 +40,12 @@ void BackendGraphMutation::mutate(Compressor& compressor) const
 
 poly::optional<CompressionResult> BackendGraphMutation::benchmarkBackendGraph(
         const std::function<Compressor()>& makeCompressor,
-        poly::span<const MultiInput> backendGraphInputs) const
+        poly::span<const MultiInput> backendGraphInputs,
+        poly::string_view dictBundleData) const
 {
     auto compressor = create(makeCompressor);
     compressor.selectStartingGraph(graph(compressor));
-    return training::benchmark(compressor, backendGraphInputs);
+    return training::benchmark(compressor, backendGraphInputs, dictBundleData);
 }
 
 } // namespace training

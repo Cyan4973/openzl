@@ -111,6 +111,7 @@ std::vector<std::vector<CandidateSelection>> getBackendGraphSelections(
         const std::function<Compressor()>& makeCompressor,
         const MergedParetoFrontier::BackendGraphMutationsMap& candidates,
         poly::span<const MultiInput> compressionInputs,
+        const std::shared_ptr<const std::string>& dictBundleData,
         ThreadPool& threadPool)
 {
     // Collect the input streams to each backend graph. Sorted so that the
@@ -139,10 +140,14 @@ std::vector<std::vector<CandidateSelection>> getBackendGraphSelections(
         std::vector<BenchmarkFuture> graphFutures;
         graphFutures.reserve(candidates.at(backendGraph).size());
         for (const auto& mutation : candidates.at(backendGraph)) {
-            graphFutures.push_back(
-                    threadPool.run([&makeCompressor, &mutation, &inputs] {
+            graphFutures.push_back(threadPool.run(
+                    [&makeCompressor, &mutation, &inputs, dictBundleData] {
                         return mutation->benchmarkBackendGraph(
-                                makeCompressor, inputs);
+                                makeCompressor,
+                                inputs,
+                                dictBundleData
+                                        ? poly::string_view(*dictBundleData)
+                                        : poly::string_view{});
                     }));
         }
         futures.push_back(std::move(graphFutures));
@@ -197,7 +202,11 @@ MergedParetoFrontier::MergedParetoFrontier(
                             std::thread::hardware_concurrency() / 2)));
 
     auto selections = getBackendGraphSelections(
-            makeCompressor_, candidates_, inputs, threadPool);
+            makeCompressor_,
+            candidates_,
+            inputs,
+            params.dictBundleData,
+            threadPool);
 
     auto frontier   = combineCandidates(selections, threadPool);
     paretoFrontier_ = pruneCandidates(
