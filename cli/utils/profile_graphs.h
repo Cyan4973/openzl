@@ -13,7 +13,7 @@ ZL_GraphID buildSerialGraph(ZL_Compressor* compressor, size_t chunkByteSize);
 ZL_GraphID buildIntGraph(
         ZL_Compressor* compressor,
         size_t eltByteWidth,
-        bool isSigned,
+        ZL_NodeID conversionNode,
         size_t chunkByteSize);
 
 } // namespace openzl::profiles
