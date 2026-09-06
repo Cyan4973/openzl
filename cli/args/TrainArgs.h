@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <sstream>
+#include <string>
 
 #include "custom_parsers/dependency_registration.h"
 #include "openzl/cpp/Compressor.hpp"
@@ -273,6 +274,7 @@ class TrainArgs : public GlobalArgs, public ProfileArgs {
     std::shared_ptr<tools::io::InputSet> inputs;
     std::shared_ptr<tools::io::Output> output;
     std::shared_ptr<tools::io::Output> dictBundleOutput;
+    std::string dictBundleData;
 
     bool useAllSamples{};
     training::TrainParams trainParams;

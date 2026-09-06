@@ -11,6 +11,7 @@ because they are slow. Run them explicitly via `make test-train`.
 import os
 import shutil
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -30,6 +31,8 @@ from command_utils import (
     execute_train,
 )
 from file_utils import file_contents_match, input_dir_path, profile_dir_path
+
+COMPOSITE_COMPRESSOR_BUILDER: str | None = None
 
 
 class Sddl2ChunkedTrainTest(unittest.TestCase):
@@ -171,6 +174,52 @@ class MLDynamicSuccessorTest(_MLBaseTest):
         )
 
         self.compress_and_decompress_samples()
+
+    def test_train_inline_preserves_input_bundle(self):
+        self.assertIsNotNone(COMPOSITE_COMPRESSOR_BUILDER)
+        dict_compressor_path = os.path.join(self.output_dir_path, "zstd_dict.zlc")
+        dict_bundle_path = os.path.join(self.output_dir_path, "zstd_dict.zd")
+        execute_train(
+            compressor_info=CompressorInfo(
+                compressor_str="zstd",
+                compressor_type=CompressorType.PROFILE,
+            ),
+            uncompressed_dir=input_dir_path(self.input_dir_name),
+            trained_compressor_path=dict_compressor_path,
+            extra_args=f"--dict-bundle-output {dict_bundle_path}",
+        )
+
+        trainable_compressor_path = os.path.join(
+            self.output_dir_path, "trainable_dict.zlc"
+        )
+        subprocess.check_call(
+            [
+                COMPOSITE_COMPRESSOR_BUILDER,
+                dict_compressor_path,
+                dict_bundle_path,
+                trainable_compressor_path,
+            ]
+        )
+
+        sample = self.input_samples[0]
+        compressed_path = os.path.join(self.output_dir_path, "inline.zl")
+        decompressed_path = os.path.join(self.output_dir_path, "inline.rt")
+        bundle_extra = f"--dict-bundle {dict_bundle_path}"
+        execute_compress(
+            file_to_compress_path=sample.orig_file_path,
+            compressor_info=CompressorInfo(
+                compressor_str=trainable_compressor_path,
+                compressor_type=CompressorType.FILE,
+            ),
+            compressed_file_path=compressed_path,
+            extra_args=(f"{bundle_extra} --train-inline --train-inline-test-limit 1"),
+        )
+        execute_decompress(
+            compressed_file_path=compressed_path,
+            decompressed_file_path=decompressed_path,
+            extra_args=bundle_extra,
+        )
+        self.assertTrue(file_contents_match(sample.orig_file_path, decompressed_path))
 
     def test_compression_ratios(self):
         """
@@ -355,6 +404,10 @@ def main():
         )
 
     command_utils.CLI_CPP = sys.argv[1]
+
+    global COMPOSITE_COMPRESSOR_BUILDER
+    if len(sys.argv) > 3:
+        COMPOSITE_COMPRESSOR_BUILDER = sys.argv[3]
 
     if len(sys.argv) > 2:
         test_arg = sys.argv[2]

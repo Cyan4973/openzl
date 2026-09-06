@@ -83,7 +83,7 @@ class BackendGraphMutation : public Mutation {
      * Implement this method to override the graph parameters of
      * `BackendGraphMutation::graph()` using
      * `ZL_Compressor_overrideGraphParams()` in the mutation. The graph
-     * parameters are overriden after overriding the base graph if both are
+     * parameters are overridden after overriding the base graph if both are
      * provided.
      *
      * @returns The new parameters or null.
@@ -96,10 +96,12 @@ class BackendGraphMutation : public Mutation {
 
     /// @returns The results of compressing @p backendGraphInputs as inputs
     /// directly to the backend graph `graph(compressor)` after this mutation is
-    /// applied.
+    /// applied. @p dictBundleData supplies dictionaries required to verify
+    /// decompression.
     poly::optional<CompressionResult> benchmarkBackendGraph(
             const std::function<Compressor()>& makeCompressor,
-            poly::span<const MultiInput> backendGraphInputs) const;
+            poly::span<const MultiInput> backendGraphInputs,
+            poly::string_view dictBundleData = {}) const;
 
     ~BackendGraphMutation() override = default;
 

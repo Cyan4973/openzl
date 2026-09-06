@@ -3,6 +3,8 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <string>
 #include "openzl/cpp/Compressor.hpp"
 #include "openzl/cpp/Exception.hpp"
 #include "openzl/cpp/poly/Optional.hpp"
@@ -35,6 +37,8 @@ struct TrainParams {
     poly::optional<size_t> maxTotalSizeMb;
     bool paretoFrontier{ false };
     bool saveAceState{ false };
+    /// Existing bundle required by compressors supplied to the trainer.
+    std::shared_ptr<const std::string> dictBundleData;
     /// Prune down to to this number of candidates.
     /// NOTE: This currently only prunes per-trainer, because we don't currently
     /// have a final pareto-optimal filtering step for all candidates.

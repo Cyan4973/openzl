@@ -101,10 +101,10 @@ BenchmarkResult runCompressionBenchmarks(const BenchmarkArgs& args)
     // create compressor, context, and decompression context
     auto cctx = createCompressionContext(
             *args.compressor(), args.level, args.strict);
+    std::optional<FatBundleDictLoader> fatBundleLoader;
     DCtx dctx;
 
     // Load dict bundle into DCtx if available
-    std::optional<FatBundleDictLoader> fatBundleLoader;
     if (!args.dictBundleData.empty()) {
         fatBundleLoader.emplace();
         fatBundleLoader->loadFatBundle(args.dictBundleData);
