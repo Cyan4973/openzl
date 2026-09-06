@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -200,6 +201,34 @@ TEST(WasmBindingTest, SignedIntRoundTrip)
     expectRoundTrip(makeIntData(2, 1024, true), OPENZL_WASM_PROFILE_I16);
     expectRoundTrip(makeIntData(4, 1024, true), OPENZL_WASM_PROFILE_I32);
     expectRoundTrip(makeIntData(8, 1024, true), OPENZL_WASM_PROFILE_I64);
+}
+
+TEST(WasmBindingTest, SignednessDoesNotChangeNumericGraph)
+{
+    constexpr openzl_wasm_Profile kUnsignedProfiles[] = {
+        OPENZL_WASM_PROFILE_U8,
+        OPENZL_WASM_PROFILE_U16,
+        OPENZL_WASM_PROFILE_U32,
+        OPENZL_WASM_PROFILE_U64,
+    };
+    constexpr openzl_wasm_Profile kSignedProfiles[] = {
+        OPENZL_WASM_PROFILE_I8,
+        OPENZL_WASM_PROFILE_I16,
+        OPENZL_WASM_PROFILE_I32,
+        OPENZL_WASM_PROFILE_I64,
+    };
+
+    for (size_t i = 0; i < std::size(kUnsignedProfiles); ++i) {
+        std::vector<uint8_t> unsignedCompressor;
+        std::vector<uint8_t> signedCompressor;
+        ASSERT_EQ(
+                serializedCompressor(kUnsignedProfiles[i], &unsignedCompressor),
+                ZL_ErrorCode_no_error);
+        ASSERT_EQ(
+                serializedCompressor(kSignedProfiles[i], &signedCompressor),
+                ZL_ErrorCode_no_error);
+        EXPECT_EQ(unsignedCompressor, signedCompressor);
+    }
 }
 
 TEST(WasmBindingTest, EmptyRoundTrip)
