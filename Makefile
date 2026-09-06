@@ -250,7 +250,7 @@ GTEST_FILEO += $(filter %Test.o,$(CXX_FILE_OBJS))
 GTEST_FILTER_LIST := VersionTest.o NoIntrospectionTest.o
 GTEST_FILEO := $(filter-out $(GTEST_FILTER_LIST),$(GTEST_FILEO))
 
-ALL_TEST_OBJS := $(patsubst %.cpp,%.o,$(foreach dir,$(TESTSDIRS) $(ML_SELECTOR_TESTS_DIR),$(wildcard $(dir)/*.cpp)))
+ALL_TEST_OBJS := $(patsubst %.cpp,%.o,$(foreach dir,$(TESTSDIRS) $(CLI_TEST_DIRS) $(ML_SELECTOR_TESTS_DIR),$(wildcard $(dir)/*.cpp)))
 GTEST_OBJS := $(foreach name,$(GTEST_FILEO),$(filter %/$(name),$(ALL_TEST_OBJS)))
 
 # Other module objects used in gtests
@@ -264,7 +264,6 @@ SERIALIZATION_TEST_OBJS := \
 	tests/serialization/GraphBuilderUtils.o
 TEST_REGISTRY_SRCS = $(wildcard $(addsuffix /*.cpp, $(TEST_REGISTRY_DIRS)))
 TEST_REGISTRY_OBJS = $(patsubst %.cpp,%.o,$(TEST_REGISTRY_SRCS))
-CLI_TEST_OBJS := $(filter-out %/test_%.o test_%.o,$(foreach DIR,$(CLI_TEST_DIRS),$(call cxx_objs,$(DIR))))
 ZLCPP_TEST_OBJS := $(call cxx_objs,$(ZLCPP_TEST_DIR))
 
 ALL_GTESTS_OBJS := \
@@ -279,7 +278,6 @@ ALL_GTESTS_OBJS := \
 	$(GTEST_OBJS) \
 	$(ZLCPP_TEST_OBJS) \
 	$(CLI_CXXOBJS) \
-	$(CLI_TEST_OBJS) \
 	$(ARG_CXXOBJS) \
 	$(LOGGER_CXXOBJS) \
 	$(CUSTOM_PARSERS_COBJS) \

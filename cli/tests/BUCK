@@ -3,7 +3,7 @@
 load("@fbcode_macros//build_defs:custom_unittest.bzl", "custom_unittest")
 load("@fbcode_macros//build_defs:python_binary.bzl", "python_binary")
 load("@fbcode_macros//build_defs:python_library.bzl", "python_library")
-load("../../defs.bzl", "zs_unittest")
+load("../../defs.bzl", "zs_cxxbinary", "zs_unittest")
 
 oncall("data_compression")
 
@@ -221,6 +221,20 @@ custom_unittest(
         "$(location :integration_test_bin)",
         "$(location ..:zli)",
         "NumericSegmentationTest.test_numeric_profiles_with_chunk_size",
+    ],
+    type = "simple",
+    deps = [
+        "..:zli",
+        ":integration_test_bin",
+    ],
+)
+
+custom_unittest(
+    name = "compression_level_test",
+    command = [
+        "$(location :integration_test_bin)",
+        "$(location ..:zli)",
+        "CompressionLevelTest.test_compression_level",
     ],
     type = "simple",
     deps = [
@@ -517,5 +531,31 @@ custom_unittest(
     deps = [
         "..:zli",
         ":integration_test_bin",
+    ],
+)
+
+custom_unittest(
+    name = "zstd_dict_train_inline_test",
+    command = [
+        "$(location :train_test_bin)",
+        "$(location ..:zli)",
+        "MLDynamicSuccessorTest.test_train_inline_preserves_input_bundle",
+        "$(location :make_trainable_dict_compressor)",
+    ],
+    type = "simple",
+    deps = [
+        "..:zli",
+        ":make_trainable_dict_compressor",
+        ":train_test_bin",
+    ],
+)
+
+zs_cxxbinary(
+    name = "make_trainable_dict_compressor",
+    srcs = ["make_trainable_dict_compressor.cpp"],
+    deps = [
+        "../..:zstronglib",
+        "../../cpp:openzl_cpp",
+        "../../custom_parsers:custom_parsers",
     ],
 )

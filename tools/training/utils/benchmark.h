@@ -9,6 +9,7 @@
 #include "openzl/cpp/Input.hpp"
 #include "openzl/cpp/poly/Optional.hpp"
 #include "openzl/cpp/poly/Span.hpp"
+#include "openzl/cpp/poly/StringView.hpp"
 #include "tools/training/utils/utils.h"
 
 namespace openzl {
@@ -87,16 +88,19 @@ struct CompressionResult {
 /**
  * Benchmark @p compressor which may be a multi-input graph on each set of
  * inputs in @p inputs.
+ * @p dictBundleData supplies dictionaries required to verify decompression.
  *
  * @returns the compression results, or poly::nullopt on failure
  */
 poly::optional<CompressionResult> benchmark(
         const Compressor& compressor,
-        poly::span<const MultiInput> inputs);
+        poly::span<const MultiInput> inputs,
+        poly::string_view dictBundleData = {});
 
 /**
  * Benchmark @p compressor which must be a single-input graph across each input
  * in @p inputs.
+ * @p dictBundleData supplies dictionaries required to verify decompression.
  *
  * @returns the compression results, or poly::nullopt on failure
  *
@@ -105,7 +109,8 @@ poly::optional<CompressionResult> benchmark(
  */
 poly::optional<CompressionResult> benchmark(
         const Compressor& compressor,
-        poly::span<const Input> inputs);
+        poly::span<const Input> inputs,
+        poly::string_view dictBundleData = {});
 
 } // namespace training
 } // namespace openzl

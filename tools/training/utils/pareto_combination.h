@@ -130,6 +130,8 @@ class MergedParetoFrontier {
      * backend graph name.
      * @param inputs The samples to benchmark on. These are the inputs to the
      * whole compressor, not to the individual backend graphs.
+     * @param params Supplies the thread count, existing dictionary bundle, and
+     * final candidate limit.
      */
     MergedParetoFrontier(
             std::function<Compressor()> makeCompressor,

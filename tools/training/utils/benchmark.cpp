@@ -2,18 +2,28 @@
 
 #include "tools/training/utils/benchmark.h"
 
+#include <memory>
+
 #include "openzl/cpp/CCtx.hpp"
 #include "openzl/cpp/DCtx.hpp"
+#include "openzl/cpp/FatBundleDictLoader.hpp"
 
 namespace openzl {
 namespace training {
 
 poly::optional<CompressionResult> benchmark(
         const Compressor& compressor,
-        poly::span<const MultiInput> inputs)
+        poly::span<const MultiInput> inputs,
+        poly::string_view dictBundleData)
 {
     CCtx cctx;
+    std::unique_ptr<FatBundleDictLoader> dictLoader;
     DCtx dctx;
+    if (!dictBundleData.empty()) {
+        dictLoader = std::make_unique<FatBundleDictLoader>();
+        dictLoader->loadFatBundle(dictBundleData);
+        dctx.refDictLoader(*dictLoader);
+    }
 
     CompressionResult result{};
     for (const auto& input : inputs) {
@@ -62,7 +72,8 @@ poly::optional<CompressionResult> benchmark(
 
 poly::optional<CompressionResult> benchmark(
         const Compressor& compressor,
-        poly::span<const Input> inputs)
+        poly::span<const Input> inputs,
+        poly::string_view dictBundleData)
 {
     std::vector<MultiInput> multiInputs;
     multiInputs.reserve(inputs.size());
@@ -71,7 +82,7 @@ poly::optional<CompressionResult> benchmark(
         multiInput.add(InputRef{ const_cast<ZL_Input*>(input.get()) });
         multiInputs.push_back(std::move(multiInput));
     }
-    return benchmark(compressor, multiInputs);
+    return benchmark(compressor, multiInputs, dictBundleData);
 }
 } // namespace training
 } // namespace openzl
