@@ -64,7 +64,11 @@ file(GLOB_RECURSE test_compress_headers CONFIGURE_DEPENDS
 # Exclude sddl2 tests - they have their own build system and test framework (Makefile-based)
 list(FILTER test_compress_srcs EXCLUDE REGEX ".*/compress/graphs/sddl2/.*")
 list(FILTER test_compress_headers EXCLUDE REGEX ".*/compress/graphs/sddl2/.*")
-add_zs_test(test_compress ${test_compress_srcs} ${test_compress_headers})
+add_zs_test(
+    test_compress
+    ${test_compress_srcs}
+    ${test_compress_headers}
+    ${CMAKE_CURRENT_LIST_DIR}/zstrong/test_zstrong_fixture.cpp)
 
 include(CheckCXXSourceCompiles)
 check_cxx_source_compiles(
