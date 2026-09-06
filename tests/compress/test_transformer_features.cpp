@@ -290,6 +290,325 @@ TEST(TransformerFeaturesTest, WidenedExtractionEnforcesWorkspaceContract)
     EXPECT_EQ(features.elt_width, 4);
 }
 
+void expectLegacyDecisionFieldsEqual(
+        const TRS_NumericFeatures& full,
+        const TRS_NumericFeatures& decision,
+        bool compareD8Cardinality)
+{
+    EXPECT_EQ(decision.count, full.count);
+    EXPECT_EQ(decision.elt_width, full.elt_width);
+    EXPECT_EQ(decision.min_u, full.min_u);
+    EXPECT_EQ(decision.max_u, full.max_u);
+    EXPECT_EQ(decision.min_s, full.min_s);
+    EXPECT_EQ(decision.max_s, full.max_s);
+    EXPECT_EQ(decision.zero_count, full.zero_count);
+    EXPECT_EQ(decision.delta_up_count, full.delta_up_count);
+    EXPECT_EQ(decision.delta_down_count, full.delta_down_count);
+    EXPECT_EQ(decision.delta_min_s, full.delta_min_s);
+    EXPECT_EQ(decision.delta_max_s, full.delta_max_s);
+    EXPECT_EQ(decision.mean_abs_delta_u_fp, full.mean_abs_delta_u_fp);
+    EXPECT_EQ(decision.cardinality_est, full.cardinality_est);
+    EXPECT_EQ(decision.pair_cardinality_est, full.pair_cardinality_est);
+    EXPECT_EQ(decision.sorted_gap_cv_fp, full.sorted_gap_cv_fp);
+    EXPECT_EQ(decision.min_lb0, full.min_lb0);
+    EXPECT_EQ(decision.range_u, full.range_u);
+    EXPECT_EQ(decision.range_s, full.range_s);
+    EXPECT_EQ(decision.zero_ratio_fp, full.zero_ratio_fp);
+    EXPECT_EQ(decision.delta_up_ratio_fp, full.delta_up_ratio_fp);
+    EXPECT_EQ(decision.delta_down_ratio_fp, full.delta_down_ratio_fp);
+    if (compareD8Cardinality) {
+        EXPECT_EQ(decision.d8_cardinality_est, full.d8_cardinality_est);
+    }
+}
+
+template <typename T>
+void expectSub64DecisionMatchesFull()
+{
+    constexpr T signBit           = T{ 1 } << (sizeof(T) * 8 - 1);
+    const std::array<T, 8> values = {
+        0,
+        1,
+        static_cast<T>(signBit - 1),
+        signBit,
+        std::numeric_limits<T>::max(),
+        4,
+        4,
+        2,
+    };
+    std::array<uint32_t, values.size()> scratchValues                 = {};
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    LegacyExtractScratch extractScratch;
+    TRS_NumericExtractWorkspace workspace = {
+        .values          = scratchValues.data(),
+        .capacity        = scratchValues.size(),
+        .match4_table    = matchTable.data(),
+        .match4_capacity = matchTable.size(),
+    };
+    extractScratch.attach(workspace);
+
+    TRS_NumericFeatures full;
+    ASSERT_TRUE(TRS_numericFeatures_extract_from_bytes(
+            &full, bytes(values), sizeof(values), sizeof(T), &workspace));
+    TRS_NumericFeatures decision;
+    ASSERT_TRUE(TRS_numericFeatures_extract_sub64_decision_from_bytes(
+            &decision, bytes(values), sizeof(values), sizeof(T), &workspace));
+    expectLegacyDecisionFieldsEqual(full, decision, sizeof(T) == 2);
+}
+
+TEST(TransformerFeaturesTest, Sub64DecisionExtractorsMatchFullFeatures)
+{
+    expectSub64DecisionMatchesFull<uint16_t>();
+    expectSub64DecisionMatchesFull<uint32_t>();
+}
+
+void expectNum64DecisionFieldsEqual(
+        const TRS_NumericFeaturesV2& full,
+        const TRS_NumericFeaturesV2& decision)
+{
+    EXPECT_EQ(decision.count, full.count);
+    EXPECT_EQ(decision.elt_width, full.elt_width);
+    EXPECT_EQ(decision.zero_count, full.zero_count);
+    EXPECT_EQ(decision.delta_up_count, full.delta_up_count);
+    EXPECT_EQ(decision.delta_down_count, full.delta_down_count);
+    EXPECT_EQ(decision.min_u, full.min_u);
+    EXPECT_EQ(decision.max_u, full.max_u);
+    EXPECT_EQ(decision.min_s, full.min_s);
+    EXPECT_EQ(decision.max_s, full.max_s);
+    EXPECT_EQ(decision.range_u, full.range_u);
+    EXPECT_EQ(decision.range_s, full.range_s);
+    EXPECT_EQ(decision.cardinality_est, full.cardinality_est);
+    EXPECT_EQ(decision.pair_cardinality_est, full.pair_cardinality_est);
+    EXPECT_EQ(decision.min_lb0, full.min_lb0);
+    EXPECT_DOUBLE_EQ(decision.mean_abs_delta_u, full.mean_abs_delta_u);
+    EXPECT_DOUBLE_EQ(decision.zero_ratio, full.zero_ratio);
+    EXPECT_DOUBLE_EQ(decision.delta_up_ratio, full.delta_up_ratio);
+    EXPECT_DOUBLE_EQ(decision.delta_down_ratio, full.delta_down_ratio);
+    EXPECT_DOUBLE_EQ(decision.sorted_gap_nmad, full.sorted_gap_nmad);
+    EXPECT_DOUBLE_EQ(decision.sorted_gap_mode, full.sorted_gap_mode);
+}
+
+TEST(TransformerFeaturesTest, Num64DecisionExtractorMatchesFullFeatures)
+{
+    const std::array<uint64_t, 8> values = {
+        0,
+        1,
+        std::numeric_limits<int64_t>::max(),
+        uint64_t{ 1 } << 63,
+        std::numeric_limits<uint64_t>::max(),
+        4,
+        4,
+        2,
+    };
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    std::array<uint64_t, TRS_NUMERIC_SORTED_GAP_BUFFER_ENTRIES>
+            sortedGapBuffer               = {};
+    TRS_NumericExtractWorkspace workspace = {
+        .match4_table        = matchTable.data(),
+        .match4_capacity     = matchTable.size(),
+        .sorted_gap_buffer   = sortedGapBuffer.data(),
+        .sorted_gap_capacity = sortedGapBuffer.size(),
+    };
+
+    TRS_NumericFeaturesV2 full;
+    ASSERT_TRUE(TRS_numericFeaturesV2_extract_from_bytes(
+            &full,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            &workspace));
+    TRS_NumericFeaturesV2 const decision =
+            TRS_numericFeaturesV2_extract_num64_decision(
+                    values.data(), values.size(), &workspace);
+    expectNum64DecisionFieldsEqual(full, decision);
+}
+
+TEST(TransformerFeaturesTest, DecisionExtractorsHandleShortInputs)
+{
+    TRS_NumericFeatures sub64;
+    ASSERT_TRUE(TRS_numericFeatures_extract_sub64_decision_from_bytes(
+            &sub64, nullptr, 0, 2, nullptr));
+    EXPECT_EQ(sub64.count, 0);
+    EXPECT_EQ(sub64.elt_width, 2);
+
+    TRS_NumericFeaturesV2 const num64Empty =
+            TRS_numericFeaturesV2_extract_num64_decision(nullptr, 0, nullptr);
+    EXPECT_EQ(num64Empty.count, 0);
+    EXPECT_EQ(num64Empty.elt_width, 8);
+
+    const std::array<uint64_t, 1> value                               = { 7 };
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    std::array<uint64_t, TRS_NUMERIC_SORTED_GAP_BUFFER_ENTRIES>
+            sortedGapBuffer               = {};
+    TRS_NumericExtractWorkspace workspace = {
+        .match4_table        = matchTable.data(),
+        .match4_capacity     = matchTable.size(),
+        .sorted_gap_buffer   = sortedGapBuffer.data(),
+        .sorted_gap_capacity = sortedGapBuffer.size(),
+    };
+    TRS_NumericFeaturesV2 full;
+    ASSERT_TRUE(TRS_numericFeaturesV2_extract_from_bytes(
+            &full, bytes(value), sizeof(value), sizeof(value[0]), &workspace));
+    TRS_NumericFeaturesV2 const decision =
+            TRS_numericFeaturesV2_extract_num64_decision(
+                    value.data(), value.size(), &workspace);
+    expectNum64DecisionFieldsEqual(full, decision);
+}
+
+TEST(TransformerFeaturesTest, Num16DecisionRequiresWideningWorkspace)
+{
+    const std::array<uint16_t, 4> values = { 1, 2, 3, 4 };
+    TRS_NumericFeatures features;
+    EXPECT_FALSE(TRS_numericFeatures_extract_sub64_decision_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            nullptr));
+
+    std::array<uint32_t, values.size() - 1> scratchValues = {};
+    LegacyExtractScratch extractScratch;
+    TRS_NumericExtractWorkspace workspace = {
+        .values   = scratchValues.data(),
+        .capacity = scratchValues.size(),
+    };
+    extractScratch.attach(workspace);
+    EXPECT_FALSE(TRS_numericFeatures_extract_sub64_decision_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            &workspace));
+}
+
+TEST(TransformerFeaturesTest, Num64V2RepresentsFullWidthExtrema)
+{
+    const std::array<uint64_t, 3> values = {
+        0,
+        uint64_t{ 1 } << 63,
+        std::numeric_limits<uint64_t>::max(),
+    };
+
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    std::array<uint64_t, TRS_NUMERIC_SORTED_GAP_BUFFER_ENTRIES>
+            sortedGapBuffer               = {};
+    TRS_NumericExtractWorkspace workspace = {
+        .match4_table        = matchTable.data(),
+        .match4_capacity     = matchTable.size(),
+        .sorted_gap_buffer   = sortedGapBuffer.data(),
+        .sorted_gap_capacity = sortedGapBuffer.size(),
+    };
+    TRS_NumericFeaturesV2 features;
+    ASSERT_TRUE(TRS_numericFeaturesV2_extract_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            &workspace));
+
+    EXPECT_EQ(features.count, values.size());
+    EXPECT_EQ(features.elt_width, sizeof(values[0]));
+    EXPECT_EQ(features.min_u, 0);
+    EXPECT_EQ(features.max_u, std::numeric_limits<uint64_t>::max());
+    EXPECT_EQ(features.min_s, std::numeric_limits<int64_t>::min());
+    EXPECT_EQ(features.max_s, 0);
+    EXPECT_EQ(features.range_u, std::numeric_limits<uint64_t>::max());
+    EXPECT_EQ(features.range_s, uint64_t{ 1 } << 63);
+}
+
+TEST(TransformerFeaturesTest, V2RejectsMissingSortedGapWorkspace)
+{
+    const std::array<uint64_t, 4> values = { 1, 2, 3, 4 };
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    std::array<uint64_t, TRS_NUMERIC_SORTED_GAP_BUFFER_ENTRIES - 1>
+            sortedGapBuffer               = {};
+    TRS_NumericExtractWorkspace workspace = {
+        .match4_table        = matchTable.data(),
+        .match4_capacity     = matchTable.size(),
+        .sorted_gap_buffer   = sortedGapBuffer.data(),
+        .sorted_gap_capacity = sortedGapBuffer.size(),
+    };
+    TRS_NumericFeaturesV2 features;
+
+    EXPECT_FALSE(TRS_numericFeaturesV2_extract_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            nullptr));
+    EXPECT_FALSE(TRS_numericFeaturesV2_extract_from_bytes(
+            &features,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            &workspace));
+}
+
+TEST(TransformerFeaturesTest, EmptySub64V2DoesNotRequireWorkspace)
+{
+    for (size_t const width : { 1, 2, 4 }) {
+        SCOPED_TRACE(width);
+        TRS_NumericFeaturesV2 fromWidened;
+        ASSERT_TRUE(TRS_numericFeaturesV2_extract(
+                &fromWidened, nullptr, 0, width, nullptr));
+        EXPECT_EQ(fromWidened.count, 0);
+        EXPECT_EQ(fromWidened.elt_width, width);
+        EXPECT_DOUBLE_EQ(fromWidened.sorted_gap_mode, 0.0);
+
+        TRS_NumericFeaturesV2 fromBytes;
+        ASSERT_TRUE(TRS_numericFeaturesV2_extract_from_bytes(
+                &fromBytes, nullptr, 0, width, nullptr));
+        EXPECT_EQ(fromBytes.count, 0);
+        EXPECT_EQ(fromBytes.elt_width, width);
+        EXPECT_DOUBLE_EQ(fromBytes.sorted_gap_mode, 0.0);
+    }
+}
+
+template <typename T>
+void expectSub64V2SortedGapMode()
+{
+    const std::array<T, 4> values                     = { 7, 1, 5, 3 };
+    const std::array<uint64_t, 4> widenedValues       = { 7, 1, 5, 3 };
+    std::array<uint32_t, values.size()> scratchValues = {};
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    std::array<uint64_t, TRS_NUMERIC_SORTED_GAP_BUFFER_ENTRIES>
+            sortedGapBuffer = {};
+    LegacyExtractScratch extractScratch;
+    TRS_NumericExtractWorkspace workspace = {
+        .values              = scratchValues.data(),
+        .capacity            = scratchValues.size(),
+        .match4_table        = matchTable.data(),
+        .match4_capacity     = matchTable.size(),
+        .sorted_gap_buffer   = sortedGapBuffer.data(),
+        .sorted_gap_capacity = sortedGapBuffer.size(),
+    };
+    extractScratch.attach(workspace);
+
+    TRS_NumericFeaturesV2 fromBytes;
+    ASSERT_TRUE(TRS_numericFeaturesV2_extract_from_bytes(
+            &fromBytes,
+            bytes(values),
+            sizeof(values),
+            sizeof(values[0]),
+            &workspace));
+    EXPECT_DOUBLE_EQ(fromBytes.sorted_gap_mode, 1.0);
+
+    TRS_NumericFeaturesV2 fromWidened;
+    ASSERT_TRUE(TRS_numericFeaturesV2_extract(
+            &fromWidened,
+            widenedValues.data(),
+            widenedValues.size(),
+            sizeof(values[0]),
+            &workspace));
+    EXPECT_DOUBLE_EQ(fromWidened.sorted_gap_mode, 1.0);
+}
+
+TEST(TransformerFeaturesTest, Sub64V2IncludesSortedGapMode)
+{
+    expectSub64V2SortedGapMode<uint8_t>();
+    expectSub64V2SortedGapMode<uint16_t>();
+    expectSub64V2SortedGapMode<uint32_t>();
+}
+
 TEST(TransformerFeaturesTest, CardinalityCountsSmallDistinctSet)
 {
     const std::array<uint64_t, 8> values = { 1, 2, 3, 4, 1, 2, 3, 4 };
@@ -329,7 +648,7 @@ TEST(TransformerFeaturesTest, NumericStatisticsRecognizeRegularSequences)
     for (uint64_t value : values)
         TRS_numeric_kmv_track_value(kmv.data(), &kmvSize, value);
 
-    EXPECT_EQ(TRS_numeric_kmv_compute_gap_cv(kmv.data(), kmvSize), 0);
+    EXPECT_EQ(TRS_numeric_kmv_compute_gap_nmad_fp(kmv.data(), kmvSize), 0);
     EXPECT_DOUBLE_EQ(
             computeSortedGapMode(
                     std::vector<uint64_t>(values.begin(), values.end())),
