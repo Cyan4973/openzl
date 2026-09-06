@@ -8,6 +8,7 @@
 
 #include "cardinality.h"
 #include "numeric_features.h"
+#include "numeric_features_v2.h"
 #include "numeric_stats.h"
 #include "openzl/shared/portability.h"
 
@@ -34,6 +35,9 @@ typedef struct {
     size_t kmv_capacity;
     uint64_t* cardinality_bitmap;
     size_t cardinality_bitmap_capacity;
+    /* Caller-owned buffer for batched sorted-gap feature extraction. */
+    uint64_t* sorted_gap_buffer;
+    size_t sorted_gap_capacity;
 } TRS_NumericExtractWorkspace;
 
 /*
@@ -83,6 +87,78 @@ int TRS_numericFeatures_extract_from_bytes(
         const uint8_t* data_bytes,
         size_t n_bytes,
         size_t elt_width,
+        const TRS_NumericExtractWorkspace* workspace);
+
+/*
+ * Runtime-only num16/num32 extraction for routing decisions.
+ *
+ * Computes exactly the legacy fields consumed by the current num16/num32
+ * scorers and score guards. Other fields remain zero and must not be consumed.
+ * Changes to scorer or guard feature dependencies must update this extractor
+ * and the fast/full parity tests together.
+ * Use the full byte extractor when feature logging or complete features are
+ * needed. The element count must not exceed UINT32_MAX. Num32 input must be
+ * naturally aligned and uses a small fixed local KMV sample. Num16 requires
+ * `TRS_NUMERIC_KMV_K` KMV entries,
+ * `TRS_CARDINALITY_U16_BITMAP_WORDS` bitmap words, and one workspace element
+ * per input element to widen its values to uint32. `d8_cardinality_est` is
+ * computed for num16 and remains zero for num32 because only the num16 scorer
+ * consumes it.
+ *
+ * Returns 1 on success and 0 if the arguments or workspace are invalid.
+ */
+int TRS_numericFeatures_extract_sub64_decision_from_bytes(
+        TRS_NumericFeatures* result,
+        const uint8_t* data_bytes,
+        size_t n_bytes,
+        size_t elt_width,
+        const TRS_NumericExtractWorkspace* workspace);
+
+/*
+ * Extract element-domain V2 features from widened numeric values. Sub-64
+ * widths decode the stable legacy contract; num64 uses the width-correct V2
+ * path directly. Byte-domain features (`match4` and `d8_cardinality_est`)
+ * remain zero. Non-empty inputs require a sorted-gap workspace. Sub-64-bit
+ * inputs additionally require the legacy workspace described above.
+ *
+ * Returns 1 on success and 0 if the arguments or workspace are invalid.
+ */
+int TRS_numericFeaturesV2_extract(
+        TRS_NumericFeaturesV2* result,
+        const uint64_t* data,
+        size_t n_elements,
+        size_t elt_width,
+        const TRS_NumericExtractWorkspace* workspace);
+
+/*
+ * Extract the complete V2 feature set, including byte-domain features.
+ * Non-empty inputs require both the match4 and sorted-gap workspace buffers.
+ * Num16 additionally requires the widening buffer described above.
+ */
+int TRS_numericFeaturesV2_extract_from_bytes(
+        TRS_NumericFeaturesV2* result,
+        const uint8_t* data_bytes,
+        size_t n_bytes,
+        size_t elt_width,
+        const TRS_NumericExtractWorkspace* workspace);
+
+/*
+ * Runtime-only num64 extraction for routing decisions.
+ *
+ * Computes exactly the fields consumed by the current num64 scorer and score
+ * guards. Other fields remain zero and must not be consumed. Use the full byte
+ * extractor when feature logging or complete features are needed. Changes to
+ * scorer or guard feature dependencies must update this extractor and the
+ * fast/full parity tests together.
+ *
+ * `data` must point to `n_elements` naturally aligned uint64_t values and may
+ * be NULL only when `n_elements` is zero. Non-empty input requires a
+ * sufficiently large sorted-gap workspace. This fixed-width extractor has no
+ * recoverable failure modes when those preconditions are satisfied.
+ */
+TRS_NumericFeaturesV2 TRS_numericFeaturesV2_extract_num64_decision(
+        const uint64_t* data,
+        size_t n_elements,
         const TRS_NumericExtractWorkspace* workspace);
 
 ZL_END_C_DECLS

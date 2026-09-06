@@ -53,7 +53,8 @@ typedef struct {
                                       pairs */
     uint64_t d8_cardinality_est;   /* estimated distinct overlapping 8-byte
                                       windows */
-    uint64_t sorted_gap_cv_fp;     /* KMV sorted-gap CV, scaled by 2^32 */
+    uint64_t sorted_gap_cv_fp;     /* Historical name: KMV sorted-gap NMAD,
+                                      scaled by 2^32 */
     uint64_t transition_gap_cv_fp; /* CV of gaps between value changes, scaled
                                       by 2^32 */
     uint64_t min_lb0;              /* min trailing zero bits (excl. zeros) */
