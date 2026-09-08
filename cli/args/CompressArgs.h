@@ -111,13 +111,13 @@ struct CompressArgs : public GlobalArgs, public ProfileArgs {
             dictBundleData = bundleInput.contents();
         }
         setVerbosityLevel(verbosity);
-        setCompressor(createCompressorFromArgs(
-                *this, parsed.cmdFlag(cmd(), kCompressor), dictBundleData));
-
         const auto levelArg = parsed.cmdFlag(cmd(), kLevel);
         if (levelArg) {
             compressionLevel = util::checkedstoiExact(levelArg.value());
+            setRequestedCompressionLevel(compressionLevel.value());
         }
+        setCompressor(createCompressorFromArgs(
+                *this, parsed.cmdFlag(cmd(), kCompressor), dictBundleData));
 
         // Get the input and output files
         auto inputPath = parsed.cmdPositional(cmd(), kInput);

@@ -69,9 +69,58 @@ ProfileArgs::ProfileArgs(const arg::ParsedArgs& parsed)
 }
 
 namespace {
-ZL_GraphID saoProfile(Compressor& compressor)
+std::array<ZL_GraphID, 6> saoTransformerFieldGraphs(Compressor& compressor)
 {
-    compressor.setParameter(CParam::CompressionLevel, 1);
+    ZL_GraphID const numeric =
+            nodes::ConvertStructToNumLE()(compressor, ZL_GRAPH_NUMERIC);
+    /* Each field needs a distinct ACE wrapper so it can be trained
+     * independently, even though their initial graphs are identical. */
+    return {
+        graphs::ACE(numeric)(compressor), graphs::ACE(numeric)(compressor),
+        graphs::ACE(numeric)(compressor), graphs::ACE(numeric)(compressor),
+        graphs::ACE(numeric)(compressor), graphs::ACE(numeric)(compressor)
+    };
+}
+
+std::array<ZL_GraphID, 6> saoTunedFieldGraphs(Compressor& compressor)
+{
+    ZL_GraphID const sra0 = graphs::ACE(
+            nodes::ConvertStructToNumLE()(
+                    compressor,
+                    nodes::DeltaInt()(
+                            compressor, graphs::FieldLz()(compressor))))(
+            compressor);
+    ZL_GraphID const sdec0 = graphs::ACE(
+            nodes::TransposeSplit()(compressor, graphs::Zstd()(compressor)))(
+            compressor);
+    ZL_GraphID const tokenCompress = nodes::TokenizeStruct()(
+            compressor,
+            graphs::FieldLz()(compressor),
+            graphs::FieldLz()(compressor));
+    ZL_GraphID const numHuffman = nodes::ConvertStructToNumLE()(
+            compressor,
+            nodes::TokenizeNumeric(/* sort */ false)(
+                    compressor,
+                    graphs::Huffman()(compressor),
+                    graphs::Huffman()(compressor)));
+
+    ZL_GraphID const is   = graphs::ACE(numHuffman)(compressor);
+    ZL_GraphID const mag  = graphs::ACE(numHuffman)(compressor);
+    ZL_GraphID const xrpm = graphs::ACE(tokenCompress)(compressor);
+    ZL_GraphID const xdpm = graphs::ACE(tokenCompress)(compressor);
+    return { sra0, sdec0, is, mag, xrpm, xdpm };
+}
+
+ZL_GraphID saoProfile(Compressor& compressor, const ProfileArgs& args)
+{
+    /* This currently matches the Standard Numeric Selector rollout threshold,
+     * ensuring the high-level SAO branch reaches Transformer. Reevaluate the
+     * relationship if either rollout policy changes. */
+    constexpr int kTransformerMinCompressionLevel = 7;
+    /* Preserve SAO's historical level-1 default when no level was requested;
+     * an explicit CLI level remains authoritative. */
+    int const compressionLevel = args.requestedCompressionLevel().value_or(1);
+    compressor.setParameter(CParam::CompressionLevel, compressionLevel);
     /* The SAO format consists of a header,
      * which is 28 bytes for the dirSilesia/sao sample specifically,
      * followed by an array of structures, each one describing a star.
@@ -101,34 +150,11 @@ ZL_GraphID saoProfile(Compressor& compressor)
      * Real*4 XRPM      R.A. proper motion (radians per year)
      * Real*4 XDPM      Dec. proper motion (radians per year)
      */
-    ZL_GraphID sra0 = graphs::ACE(
-            nodes::ConvertStructToNumLE()(
-                    compressor,
-                    nodes::DeltaInt()(
-                            compressor, graphs::FieldLz()(compressor))))(
-            compressor);
-    ZL_GraphID sdec0 = graphs::ACE(
-            nodes::TransposeSplit()(compressor, graphs::Zstd()(compressor)))(
-            compressor);
-    ZL_GraphID token_compress = nodes::TokenizeStruct()(
-            compressor,
-            graphs::FieldLz()(compressor),
-            graphs::FieldLz()(compressor));
-    ZL_GraphID num_huffman = nodes::ConvertStructToNumLE()(
-            compressor,
-            nodes::TokenizeNumeric(/* sort */ false)(
-                    compressor,
-                    graphs::Huffman()(compressor),
-                    graphs::Huffman()(compressor)));
-
-    ZL_GraphID is   = graphs::ACE(num_huffman)(compressor);
-    ZL_GraphID mag  = graphs::ACE(num_huffman)(compressor);
-    ZL_GraphID xrpm = graphs::ACE(token_compress)(compressor);
-    ZL_GraphID xdpm = graphs::ACE(token_compress)(compressor);
-
-    const std::array<size_t, 6> fieldSizes      = { 8, 8, 2, 2, 4, 4 };
-    const std::array<ZL_GraphID, 6> fieldGraphs = { sra0, sdec0, is,
-                                                    mag,  xrpm,  xdpm };
+    std::array<size_t, 6> const fieldSizes = { 8, 8, 2, 2, 4, 4 };
+    std::array<ZL_GraphID, 6> const fieldGraphs =
+            compressionLevel >= kTransformerMinCompressionLevel
+            ? saoTransformerFieldGraphs(compressor)
+            : saoTunedFieldGraphs(compressor);
 
     ZL_GraphID splitStructure = ZL_Compressor_registerSplitByStructGraph(
             compressor.get(),
@@ -505,9 +531,9 @@ compressProfiles()
         mp[kSAOName]         = std::make_shared<CompressProfile>(
                 kSAOName,
                 "SAO format from the Silesia corpus",
-                [](ZL_Compressor* comp, void*, const ProfileArgs&) {
+                [](ZL_Compressor* comp, void*, const ProfileArgs& args) {
                     CompressorRef compressor(comp);
-                    return saoProfile(compressor);
+                    return saoProfile(compressor, args);
                 });
 
         std::string kGenericNumericName = "numeric-ml-selector-64";

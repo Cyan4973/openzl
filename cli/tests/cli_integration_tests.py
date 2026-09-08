@@ -452,13 +452,15 @@ class CompressionLevelTest(unittest.TestCase):
         level: int,
         extra_args: str = "",
         output_suffix: str = "",
+        input_path: str | None = None,
     ) -> str:
+        source_path = input_path or self.input_path
         compressed_path = os.path.join(
             self.tmpdir, f"{profile}-level-{level}{output_suffix}.zl"
         )
         decompressed_path = compressed_path + ".rt"
         execute_compress(
-            file_to_compress_path=self.input_path,
+            file_to_compress_path=source_path,
             compressor_info=CompressorInfo(
                 compressor_str=profile,
                 compressor_type=CompressorType.PROFILE,
@@ -470,7 +472,7 @@ class CompressionLevelTest(unittest.TestCase):
             compressed_file_path=compressed_path,
             decompressed_file_path=decompressed_path,
         )
-        self.assertTrue(file_contents_match(self.input_path, decompressed_path))
+        self.assertTrue(file_contents_match(source_path, decompressed_path))
         return compressed_path
 
     def test_compression_level(self) -> None:
@@ -500,6 +502,49 @@ class CompressionLevelTest(unittest.TestCase):
             ),
             0,
         )
+
+    def _write_sao_file(self) -> str:
+        sao_path = os.path.join(self.tmpdir, "sao.bin")
+        with open(sao_path, "wb") as sao_file:
+            sao_file.write(bytes(28))
+            for i in range(16384):
+                sao_file.write(
+                    struct.pack(
+                        "<dd2shff",
+                        i / 8192.0,
+                        (i % 4096) / 2048.0 - 1.0,
+                        (b"G2", b"K1", b"M0")[i % 3],
+                        (i % 3000) - 1500,
+                        (i % 1024) / 1024.0,
+                        -((i % 2048) / 2048.0),
+                    )
+                )
+        return sao_path
+
+    @staticmethod
+    def _trace_uses_transformer(trace_path: str) -> bool:
+        with open(trace_path, "rb") as trace_file:
+            # CBOR text strings retain their UTF-8 representation in the trace.
+            return b"zl.private.transformer_" in trace_file.read()
+
+    def test_sao_compression_level(self) -> None:
+        sao_path = self._write_sao_file()
+        level_6_trace = os.path.join(self.tmpdir, "sao-level-6.trace")
+        level_7_trace = os.path.join(self.tmpdir, "sao-level-7.trace")
+        self._compress_and_round_trip(
+            "sao",
+            6,
+            extra_args=f"--trace {level_6_trace} --no-stream-preview",
+            input_path=sao_path,
+        )
+        self._compress_and_round_trip(
+            "sao",
+            7,
+            extra_args=f"--trace {level_7_trace} --no-stream-preview",
+            input_path=sao_path,
+        )
+        self.assertFalse(self._trace_uses_transformer(level_6_trace))
+        self.assertTrue(self._trace_uses_transformer(level_7_trace))
 
 
 class SerialSegmentationTest(unittest.TestCase):
