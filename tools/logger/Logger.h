@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <optional>
 #include <ostream>
 #include <stdexcept>
 #include <string>
@@ -62,13 +63,28 @@ class Logger {
         return global_verbosity;
     }
 
+    /**
+     * Overrides the auto-detected TTY status of stderr. Exposed for tests, so
+     * that they can exercise both the TTY and the non-TTY code paths.
+     */
+    void setIsTTY(bool isTTY)
+    {
+        is_tty = isTTY;
+        previous_update_message.reset();
+    }
+    bool isTTY() const
+    {
+        return is_tty;
+    }
+
    private:
     Logger()
             : global_verbosity(INFO),
               progress_line_active(false),
               progress_level(INFO),
               progress_value(0.0),
-              progress_message("")
+              progress_message(""),
+              is_tty(stderrIsTTY())
     {
     }
     Logger(const Logger&)            = delete;
@@ -83,6 +99,31 @@ class Logger {
     static void log_inner(std::ostream& os, const Arg& arg, const Args&... args)
     {
         log_inner(os << arg, args...);
+    }
+
+    template <typename... Args>
+    static std::string formatToString(const char* format, const Args&... args)
+    {
+        if (format == nullptr || format[0] == '\0') {
+            return {};
+        }
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#pragma GCC diagnostic ignored "-Wformat-security"
+        const int required_size = snprintf(nullptr, 0, format, args...);
+        if (required_size <= 0) {
+            return {};
+        }
+        std::vector<char> buffer(required_size + 1); // +1 for null terminator
+        snprintf(buffer.data(), buffer.size(), format, args...);
+#pragma GCC diagnostic pop
+        return std::string(buffer.data(), (size_t)required_size);
+    }
+
+    // Number of '=' cells the bar shows for this progress value.
+    static constexpr int progressBarFilled(double progress)
+    {
+        return (int)(progress * progressBarWidth);
     }
 
    public:
@@ -107,11 +148,7 @@ class Logger {
 
         finalizeProgressIfActive();
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
-        fprintf(stderr, format, args...);
-        fprintf(stderr, "\n");
-#pragma GCC diagnostic pop
+        fprintf(stderr, "%s\n", formatToString(format, args...).c_str());
 
         reprintProgressIfActive();
     }
@@ -124,21 +161,7 @@ class Logger {
             return;
         }
 
-        // Move to beginning of line
-        // TODO remove control characters when printing to non-tty
-        fprintf(stderr, "\r");
-
-        // Print the formatted message
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
-        fprintf(stderr, format, args...);
-#pragma GCC diagnostic pop
-
-        // Clear to end of line to remove any remaining characters
-        // TODO remove control characters when printing to non-tty
-        fprintf(stderr, "%s", CLEAR_TO_EOL);
-
-        fflush(stderr);
+        updateLine(formatToString(format, args...));
     }
 
     template <typename... Args>
@@ -158,6 +181,15 @@ class Logger {
                     + std::to_string(progress) + ".");
         }
 
+        // On a non-TTY every redraw costs a whole new line, so wait until the
+        // bar gains or loses an '=' before spending one. A TTY redraws the
+        // line in place, so there it is not worth withholding an update.
+        const int filled = progressBarFilled(progress);
+        if (!instance().is_tty && instance().progress_line_active
+            && filled == progressBarFilled(instance().progress_value)) {
+            return;
+        }
+
         instance().progress_line_active = true;
 
         // Store current progress information for re-printing
@@ -165,22 +197,9 @@ class Logger {
         instance().progress_value = progress;
 
         // Build the user message part
-        std::string userMsg;
-        if (format && format[0] != '\0') {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
-            int required_size = snprintf(nullptr, 0, format, args...);
-            if (required_size > 0) {
-                std::vector<char> buffer(
-                        required_size + 1); // +1 for null terminator
-                snprintf(buffer.data(), buffer.size(), format, args...);
-                userMsg = std::string(buffer.data());
-            }
-#pragma GCC diagnostic pop
-        }
+        const std::string userMsg = formatToString(format, args...);
 
         // Build the progress message
-        int filled = (int)(progress * progressBarWidth);
         char progressBar[progressBarWidth + 3]; // progressBarWidth + 2 for ends
                                                 // + 1 for null terminator
         progressBar[0] = '[';
@@ -202,8 +221,7 @@ class Logger {
             return;
         }
 
-        // Add newline
-        fprintf(stderr, "\n");
+        finalizeUpdateLine();
     }
 
     // Finalize an UPDATE line by adding a newline
@@ -211,6 +229,7 @@ class Logger {
     {
         finalizeUpdate(level);
         instance().progress_line_active = false;
+        instance().progress_value       = 0.0;
     }
 
    private:
@@ -219,7 +238,17 @@ class Logger {
 
     static constexpr int PADDING_SIZE = 80;
 
+    // The last message written by update(), or nullopt if the update line has
+    // since been cleared or finalized. Repeating a message is a no-op, which
+    // keeps non-TTY output free of duplicated progress lines.
+    std::optional<std::string> previous_update_message;
+    bool is_tty;
+
+    static bool stderrIsTTY();
+
     static bool shouldLog(LogLevel level);
+    static void updateLine(const std::string& message);
+    static void finalizeUpdateLine();
     static void clearLine();
     static void finalizeProgressIfActive();
     static void reprintProgressIfActive();
