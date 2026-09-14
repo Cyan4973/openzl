@@ -118,6 +118,11 @@ class LzComponent : public OpenZLComponent {
                     ZL_LzParam_overflowLengthsGraphIdx);
             maybeOverrideSuccessor(
                     params, successors, gen, ZL_LzParam_muxLengthsGraphIdx);
+
+            maybeSetParam(
+                    params, gen, ZL_LzParam_minGainForEntropyBytes, 0, 100);
+            maybeSetParam(params, gen, ZL_LzParam_minGainForEntropyPct, 0, 10);
+
             graphs.push_back(compressor.parameterizeGraph(
                     ZL_GRAPH_LZ,
                     GraphParameters{

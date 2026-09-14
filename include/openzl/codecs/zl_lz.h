@@ -155,6 +155,25 @@ typedef enum {
      * @note Must be a multi-input graph that accepts two 16-bit numeric inputs.
      */
     ZL_LzParam_muxLengthsGraphIdx = 1004,
+
+    /**
+     * Entropy backend graphs will only be invoked if they can save this many
+     * bytes. This overrides the default value which is 0.5% of the input size
+     * + 50 bytes.
+     *
+     * Increasing this value will speed up decompression at the cost of
+     * compressed size.
+     */
+    ZL_LzParam_minGainForEntropyBytes = 10000,
+
+    /**
+     * Entropy backend graphs will only be invoked if they can save this percent
+     * of their input size. This overrides the default value, which is 1%.
+     *
+     * Increasing this value will speed up decompression at the cost of
+     * compressed size.
+     */
+    ZL_LzParam_minGainForEntropyPct = 10001,
 } ZL_LzParam;
 
 #define ZL_LZPARAM_WINDOWLOG_MIN 10

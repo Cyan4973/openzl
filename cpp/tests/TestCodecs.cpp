@@ -78,11 +78,13 @@ TEST_F(TestCodecs, lzParameters)
                                     .hashLog2         = 17,
                                     .hashLength       = 5,
                             },
-                    .literalsGraph        = graphs::Store::graph,
-                    .offsetsGraph         = graphs::Store::graph,
-                    .muxedBytesGraph      = graphs::Store::graph,
-                    .overflowLengthsGraph = graphs::Store::graph,
-                    .muxLengthsGraph      = muxLengthsGraph,
+                    .literalsGraph          = graphs::Store::graph,
+                    .offsetsGraph           = graphs::Store::graph,
+                    .muxedBytesGraph        = graphs::Store::graph,
+                    .overflowLengthsGraph   = graphs::Store::graph,
+                    .muxLengthsGraph        = muxLengthsGraph,
+                    .minGainForEntropyBytes = 42,
+                    .minGainForEntropyPct   = 43,
             });
 
     const auto graphParameters = lz.parameters();
@@ -103,6 +105,8 @@ TEST_F(TestCodecs, lzParameters)
         { ZL_LzParam_muxedBytesGraphIdx, 2 },
         { ZL_LzParam_overflowLengthsGraphIdx, 3 },
         { ZL_LzParam_muxLengthsGraphIdx, 4 },
+        { ZL_LzParam_minGainForEntropyBytes, 42 },
+        { ZL_LzParam_minGainForEntropyPct, 43 },
     };
     EXPECT_EQ(
             collectIntParams(*graphParameters->localParams), expectedIntParams);

@@ -151,6 +151,12 @@ class Lz : public Graph {
         poly::optional<GraphID> overflowLengthsGraph;
         /// Optionally override the backend mux lengths graph
         poly::optional<GraphID> muxLengthsGraph;
+        /// Optionally override the minimum bytes saved needed to invoke an
+        /// entropy backend graph
+        poly::optional<int> minGainForEntropyBytes;
+        /// Optionally override the minimum percent saved needed to invoke an
+        /// entropy backend graph
+        poly::optional<int> minGainForEntropyPct;
     };
 
     Lz() {}
@@ -189,6 +195,17 @@ class Lz : public Graph {
                 ZL_LzParam_overflowLengthsGraphIdx,
                 params_->overflowLengthsGraph);
         addGraph(ZL_LzParam_muxLengthsGraphIdx, params_->muxLengthsGraph);
+
+        auto addParam = [&](int key, poly::optional<int> value) {
+            if (value.has_value()) {
+                lp.addIntParam(key, *value);
+            }
+        };
+        addParam(
+                ZL_LzParam_minGainForEntropyBytes,
+                params_->minGainForEntropyBytes);
+        addParam(
+                ZL_LzParam_minGainForEntropyPct, params_->minGainForEntropyPct);
 
         return GraphParameters{
             .customGraphs = std::move(graphs),
