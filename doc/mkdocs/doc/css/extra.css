@@ -286,3 +286,73 @@
         gap: 8px;
     }
 }
+
+/* Blog post titles: Material's default h1 is thin (300) and light grey. */
+.md-content--post .md-typeset h1 {
+    color: var(--md-default-fg-color);
+    font-weight: 700;
+}
+
+/* Blog index: excerpt titles, a notch lighter than the post page title. */
+.md-post--excerpt .md-typeset h2 {
+    color: var(--md-default-fg-color);
+    font-weight: 600;
+}
+
+/* Dense benchmark tables, opted into with `??? note bench "…"`.
+ * Material's table defaults are tuned for two or three columns of prose; at
+ * seven columns they overflow, and `word-break: break-word` on inline code then
+ * shreds identifiers mid-word instead of letting the table scroll. */
+.md-typeset .bench table:not([class]) {
+    /* Material caps the table at the column width and lets it shrink; keeping
+     * `overflow: auto` means an oversized table scrolls rather than wraps. */
+    width: 100%;
+}
+
+.md-typeset .bench table:not([class]) th,
+.md-typeset .bench table:not([class]) td {
+    padding: 0.3em 0.45em;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+/* Dropping the code background also drops its horizontal padding, which is
+ * what the family column needs most. */
+.md-typeset .bench table:not([class]) code {
+    background: none;
+    box-shadow: none;
+    font-size: 0.8em;
+    padding: 0;
+    word-break: normal;
+}
+
+/* Reading across 20 rows of seven right-aligned numbers needs a row anchor. */
+.md-typeset .bench table:not([class]) tbody tr:nth-child(odd) {
+    background-color: var(--md-default-fg-color--lightest);
+}
+
+.md-typeset .bench table:not([class]) tbody tr:hover {
+    background-color: var(--md-accent-fg-color--transparent);
+}
+
+/* The `*… median …*` rows are separators, not data. */
+.md-typeset .bench table:not([class]) tbody tr:has(td:first-child em) {
+    background: none;
+}
+
+.md-typeset .bench table:not([class]) tbody tr:has(td:first-child em) td {
+    border-top: 0.05rem solid var(--md-typeset-table-color);
+    color: var(--md-default-fg-color--light);
+    font-size: 0.85em;
+    padding-top: 0.6em;
+}
+
+/* The details wrapper adds padding on both sides; on a phone that is the
+ * difference between the table fitting and not. */
+@media screen and (max-width: 44.984375em) {
+    .md-typeset .bench > .md-typeset__scrollwrap,
+    .md-typeset details.bench {
+        padding-left: 0.4rem;
+        padding-right: 0.4rem;
+    }
+}
