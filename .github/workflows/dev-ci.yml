@@ -29,6 +29,9 @@ env:
   # Common environment variables
   MAKEFLAGS: "V=1"
 
+permissions:
+  contents: read
+
 jobs:
   # =============================================================================
   # BUILD JOBS

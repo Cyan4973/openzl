@@ -38,6 +38,9 @@ on:
       - '.github/workflows/wasm-ci.yml'
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
   wasm-build:
     name: WASM build

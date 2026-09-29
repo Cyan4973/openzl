@@ -13,6 +13,8 @@ on:
   pull_request:
     branches: [dev, master, actionsTest]
 
+permissions: {}
+
 jobs:
   ci-gate:
     name: CI Gate
