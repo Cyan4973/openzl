@@ -148,13 +148,16 @@ $(foreach OBJ,$(CPP_OBJS),$(eval $(call addTargetCxxObject,$(OBJ),cpp)))
 $(foreach OBJ,$(CC_OBJS),$(eval $(call addTargetCxxObject,$(OBJ),cc)))
 $(foreach OBJ,$(ASM_OBJS),$(eval $(call addTargetAsmObject,$(OBJ))))
 
-# Include dependency files discovered from already built object files.
-MCM_KNOWN_OBJECTS := $(sort $(C_OBJS) $(CPP_OBJS) $(CC_OBJS) $(ASM_OBJS))
-MCM_CACHE_DIRS := $(filter-out $(CACHE_ROOT)/generic/,$(wildcard $(CACHE_ROOT)/*/))
-MCM_CACHE_DIRS += $(wildcard $(CACHE_ROOT)/generic/*/)
-MCM_EXISTING_OBJECTS := $(foreach dir,$(MCM_CACHE_DIRS),$(wildcard $(addprefix $(dir),$(MCM_KNOWN_OBJECTS))))
-MCM_DEPFILES := $(patsubst %.o,%.d,$(MCM_EXISTING_OBJECTS))
-include $(MCM_DEPFILES)
+# mcm_include_depfiles - Include the depfiles of objects $(2) in cache dir $(1),
+# so that header changes trigger recompilation. Each depfile is read once.
+MCM_DEPFILES :=
+define mcm_include_depfiles  # cacheDir, objects
+MCM_NEW_DEPFILES := $$(filter-out $$(MCM_DEPFILES),$$(sort $$(wildcard $$(addprefix $(1),$(2:.o=.d)))))
+MCM_DEPFILES += $$(MCM_NEW_DEPFILES)
+# Empty rule: stops make searching implicit rules to remake each depfile (~100 failed stat() each).
+$$(MCM_NEW_DEPFILES): ;
+include $$(MCM_NEW_DEPFILES)
+endef
 
 # --------------------------------------------------------------------------------------------
 # The following macros are used to create targets in the user Makefile.
@@ -176,6 +179,8 @@ define static_library  # libName, objectDeps, extraDeps, postBuildCmds, extraHas
 
 $$(if $$(filter 2,$$(V)),$$(info $$(call $(0),$(1),$(2),$(3),$(4),$(5))))
 MCM_ALL_BINS += $(1)
+MCM_HASH_$(1) := $$(call HASH_FUNC,$(1),$(2) $$(CPPFLAGS) $$(CC) $$(CFLAGS) $$(CXX) $$(CXXFLAGS) $$(AR) $$(ARFLAGS) $(MCM_STRIP) $(5))
+$$(eval $$(call mcm_include_depfiles,$$(CACHE_ROOT)/$$(MCM_HASH_$(1))/,$(2)))
 
 $$(CACHE_ROOT)/%/$(1) : $$(addprefix $$(CACHE_ROOT)/%/,$(2)) $(3)
 	@echo AR $$@
@@ -184,7 +189,7 @@ $$(CACHE_ROOT)/%/$(1) : $$(addprefix $$(CACHE_ROOT)/%/,$(2)) $(3)
 
 .PHONY: $(1)
 $(1) : ARFLAGS = rcs
-$(1) : $$(CACHE_ROOT)/$$(call HASH_FUNC,$(1),$(2) $$(CPPFLAGS) $$(CC) $$(CFLAGS) $$(CXX) $$(CXXFLAGS) $$(AR) $$(ARFLAGS) $(MCM_STRIP) $(5))/$(1)
+$(1) : $$(CACHE_ROOT)/$$(MCM_HASH_$(1))/$(1)
 	$$(LN) -sf $$< $$@
 
 endef # static_library
@@ -204,6 +209,8 @@ define c_dynamic_library  # libName, objectDeps, extraDeps, postLinkCmds, extraH
 
 $$(if $$(filter 2,$$(V)),$$(info $$(call $(0),$(1),$(2),$(3),$(4),$(5))))
 MCM_ALL_BINS += $(1)
+MCM_HASH_$(1) := $$(call HASH_FUNC,$(1),$(2) $$(CPPFLAGS) $$(CC) $$(CFLAGS) $$(LDFLAGS) $$(LDLIBS) $(MCM_STRIP) $(5))
+$$(eval $$(call mcm_include_depfiles,$$(CACHE_ROOT)/$$(MCM_HASH_$(1))/,$(2)))
 
 $$(CACHE_ROOT)/%/$(1) : $$(addprefix $$(CACHE_ROOT)/%/,$(2)) $(3)
 	@echo LD $$@
@@ -215,7 +222,7 @@ endif
 
 .PHONY: $(1)
 $(1) : CFLAGS += -fPIC
-$(1) : $$(CACHE_ROOT)/$$(call HASH_FUNC,$(1),$(2) $$(CPPFLAGS) $$(CC) $$(CFLAGS) $$(LDFLAGS) $$(LDLIBS) $(MCM_STRIP) $(5))/$(1)
+$(1) : $$(CACHE_ROOT)/$$(MCM_HASH_$(1))/$(1)
 	$$(LN) -sf $$< $$@
 
 endef # c_dynamic_library
@@ -267,7 +274,8 @@ endif
 
 endif
 
-MCM_HASH_$(1) = $$(call HASH_FUNC,$(1),$($(6)) $$(CPPFLAGS) $($(7)) $$(LDFLAGS) $$(LDLIBS) $$(MCM_STRIP) $(5))
+MCM_HASH_$(1) := $$(call HASH_FUNC,$(1),$($(6)) $$(CPPFLAGS) $($(7)) $$(LDFLAGS) $$(LDLIBS) $$(MCM_STRIP) $(5))
+$$(eval $$(call mcm_include_depfiles,$$(CACHE_ROOT)/$$(MCM_HASH_$(1))/,$(2)))
 
 .PHONY: $(1)
 $(1) : $$(CACHE_ROOT)/$$(MCM_HASH_$(1))/$(1)
