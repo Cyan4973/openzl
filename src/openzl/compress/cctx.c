@@ -575,7 +575,7 @@ static ZL_Report CCTX_runCNode_wParams(
             nbInputs,
             ZL_runtimeNodeInputLimit(cctx->appliedGCParams.formatVersion),
             node_versionMismatch,
-            "Too many inputs (%u) for format version %u (max=%u)",
+            "Too many inputs (%zu) for format version %u (max=%zu)",
             nbInputs,
             cctx->appliedGCParams.formatVersion,
             ZL_runtimeNodeInputLimit(cctx->appliedGCParams.formatVersion));

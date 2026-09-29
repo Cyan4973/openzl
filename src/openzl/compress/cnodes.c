@@ -217,7 +217,7 @@ static ZL_RESULT_OF(CNodeID) CTM_registerCNode(
                     CNODE_getNbInputPorts(cnode),
                     ZL_runtimeNodeInputLimit(ZL_MAX_FORMAT_VERSION),
                     node_invalid_input,
-                    "Too many inputs (%u) defined for transform '%s' (max=%u)",
+                    "Too many inputs (%zu) defined for transform '%s' (max=%zu)",
                     CNODE_getNbInputPorts(cnode),
                     CNODE_getName(cnode),
                     ZL_runtimeNodeInputLimit(ZL_MAX_FORMAT_VERSION));

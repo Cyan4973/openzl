@@ -694,7 +694,7 @@ static ZL_Report DCTX_validateNodeStatic(
     ZL_ERR_IF_NOT(
             DT_isNbRegensCompatible(dt, nodeInfo->nbRegens),
             nodeRegen_countIncorrect,
-            "Transform '%s'(%u) is assigned %u streams to regenerate, but its signature specifies %u streams",
+            "Transform '%s'(%u) is assigned %u streams to regenerate, but its signature specifies %zu streams",
             DT_getTransformName(dt),
             nodeInfo->trpid.trid,
             nodeInfo->nbRegens,
@@ -710,7 +710,7 @@ static ZL_Report DCTX_validateNodeStatic(
                 0,
                 corruption,
                 "Transform id=%u isn't accepting VO streams, "
-                "but %zu VO streams are nonetheless assigned to it in this graph.",
+                "but %u VO streams are nonetheless assigned to it in this graph.",
                 dt->miGraphDesc.CTid,
                 nodeInfo->nbVOs);
     }

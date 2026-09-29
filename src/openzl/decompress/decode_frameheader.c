@@ -493,7 +493,7 @@ ZL_Report ZL_FrameInfo_getNumElts(const ZL_FrameInfo* zfi, int outputID)
             zfi->formatVersion,
             ZL_CHUNK_VERSION_MIN,
             GENERIC,
-            "This method only works on frames with version >= %zu",
+            "This method only works on frames with version >= %d",
             ZL_CHUNK_VERSION_MIN);
 
     // Currently only supports string & serial
@@ -583,7 +583,7 @@ ZL_RESULT_OF(ZL_Comment) ZL_FrameInfo_getComment(const ZL_FrameInfo* zfi)
             zfi->formatVersion,
             ZL_COMMENT_VERSION_MIN,
             GENERIC,
-            "This method only works on frames with version >= %zu",
+            "This method only works on frames with version >= %d",
             ZL_COMMENT_VERSION_MIN);
     comment.data = zfi->comment;
     comment.size = zfi->commentSize;
@@ -1415,7 +1415,8 @@ static ZL_Report getDecompressedSizeV3orMore(
             oSize,
             (uint64_t)SIZE_MAX,
             GENERIC,
-            "large size (%llu): unsupported on current system");
+            "large size (%llu): unsupported on current system",
+            (unsigned long long)oSize);
     return ZL_returnValue((size_t)oSize - 1);
 }
 
