@@ -14,6 +14,8 @@ Starting in v0.2.0, OpenZL ships its own native LZ engine, which can offer bette
 While OpenZL's main target is structured data, LZ is still a core backend compression technique used in nearly all compression graphs, applied after the higher-order structure has been removed.
 Additionally, there are use cases where the structure of the data is unknown, and LZ is a good default.
 
+<!-- more -->
+
 There are two major reasons why OpenZL's native LZ engine can offer better performance than Zstandard or LZ4:
 
 **Wire format:**

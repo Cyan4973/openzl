@@ -13,6 +13,8 @@ tags:
 
 OpenZL’s graph model is key to its ability to outperform generic compressors. Understanding and optimizing OpenZL compression requires understanding the compression graph. As part of the team’s continued focus on the user experience, we’ve developed an [interactive visualization tool](/tools/trace) that makes this task simple.
 
+<!-- more -->
+
 ## Background
 
 When preparing for open-sourcing, it was clear that we needed a new visualization tool. The old visualization tool, named streamdump, had served us well but was quickly becoming insufficient. For instance, streamdump works at decompress time only, and was designed in such a way that corrupted frames could not be inspected.

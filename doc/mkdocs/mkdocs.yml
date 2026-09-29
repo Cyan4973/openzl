@@ -204,6 +204,7 @@ plugins:
       authors: true
       post_url_date_format: yyyy-MM-dd
       post_url_format: "{date}-{slug}"
+      post_excerpt: required
   - mkdocstrings:
       default_handler: zstd
       handlers:
