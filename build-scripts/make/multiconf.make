@@ -7,17 +7,16 @@
 # Provides V=1 / VERBOSE=1 support. V=2 is used for debugging purposes.
 # Complement target clean: delete objects and binaries created by this script
 
+# Source files are discovered in the current directory and below.
 # Requires:
-# - C_SRCDIRS, CXX_SRCDIRS, ASM_SRCDIRS defined
-#   OR
-#   C_SRCS, CXX_SRCS and ASM_SRCS variables defined
-#   *and* vpath set to find all source files
-#   OR
-#   C_OBJS, CXX_OBJS and ASM_OBJS variables defined
-#   *and* vpath set to find all source files
 # - directory `cachedObjs/` available to cache object files.
 #   alternatively: set CACHE_ROOT to some different value.
 # Optional:
+# - MCM_EXCLUDE_DIRS: directories to skip, besides hidden ones and CACHE_ROOT,
+#   as paths from the current directory or `find -path` patterns (e.g. docs */experimental)
+# - C_SRCDIRS, CXX_SRCDIRS, ASM_SRCDIRS: directories to add, e.g. excluded ones
+# - C_SRCS, CPP_SRCS, CC_SRCS and ASM_SRCS (or C_OBJS, CPP_OBJS, CC_OBJS and ASM_OBJS)
+#   replace the discovered files
 # - HASH can be set to a different custom hash program.
 
 # *_program*: generates a recipe for a target that will be built in a cache directory.
@@ -148,21 +147,25 @@ endef # addTargetCxxObject
 # recompiling when they change: e.g. headers of dependencies fetched on demand.
 mcm_order_deps = $(foreach o,$(1),$(eval MCM_ODEPS_$(o) += $(2)))
 
-# Discover source files and directories
-C_SRCDIRS += .
+# Discover source files: in the current directory and below, except in hidden directories,
+# $(CACHE_ROOT) and MCM_EXCLUDE_DIRS. Files are listed rather than directories, so that
+# large trees without sources (e.g. node_modules) only cost their traversal.
+MCM_SRCS := $(patsubst ./%,%,$(shell find . -name '.?*' -prune \
+	$(foreach d,$(patsubst %/,%,$(CACHE_ROOT) $(MCM_EXCLUDE_DIRS)),-o -path './$(d)' -prune) \
+	-o ! -type d \( -name '*.c' -o -name '*.cpp' -o -name '*.cc' -o -name '*.S' \) -print))
+
+# Directories added by C_SRCDIRS, CXX_SRCDIRS and ASM_SRCDIRS
 vpath %.c $(C_SRCDIRS)
-CXX_SRCDIRS += .
 vpath %.cpp $(CXX_SRCDIRS)
 vpath %.cc $(CXX_SRCDIRS)
-ASM_SRCDIRS += .
 vpath %.S $(ASM_SRCDIRS)
 
-# If C_SRCDIRS, CXX_SRCDIRS and ASM_SRCDIRS are not defined, use C_SRCS, CXX_SRCS and ASM_SRCS
-C_SRCS   ?= $(foreach dir,$(C_SRCDIRS),$(wildcard $(dir)/*.c))
-CPP_SRCS ?= $(foreach dir,$(CXX_SRCDIRS),$(wildcard $(dir)/*.cpp))
-CC_SRCS  ?= $(foreach dir,$(CXX_SRCDIRS),$(wildcard $(dir)/*.cc))
+# If C_SRCS, CPP_SRCS, CC_SRCS and ASM_SRCS are not defined, use the discovered and added files
+C_SRCS   ?= $(sort $(filter %.c,$(MCM_SRCS)) $(foreach dir,$(C_SRCDIRS),$(wildcard $(dir)/*.c)))
+CPP_SRCS ?= $(sort $(filter %.cpp,$(MCM_SRCS)) $(foreach dir,$(CXX_SRCDIRS),$(wildcard $(dir)/*.cpp)))
+CC_SRCS  ?= $(sort $(filter %.cc,$(MCM_SRCS)) $(foreach dir,$(CXX_SRCDIRS),$(wildcard $(dir)/*.cc)))
 CXX_SRCS ?= $(CPP_SRCS) $(CC_SRCS)
-ASM_SRCS ?= $(foreach dir,$(ASM_SRCDIRS),$(wildcard $(dir)/*.S))
+ASM_SRCS ?= $(sort $(filter %.S,$(MCM_SRCS)) $(foreach dir,$(ASM_SRCDIRS),$(wildcard $(dir)/*.S)))
 
 # If C_SRCS, CXX_SRCS and ASM_SRCS are not defined, use C_OBJS, CXX_OBJS and ASM_OBJS
 C_OBJS   ?= $(patsubst %.c,%.o,$(C_SRCS))
