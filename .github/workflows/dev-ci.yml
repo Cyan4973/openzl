@@ -47,6 +47,13 @@ jobs:
         run: |
           make all V=1
           cd tests && ./test_ensure.sh
+      - name: Check that a second build does nothing
+        run: |
+          out=$(make -n all)
+          if printf '%s\n' "$out" | grep -E '^echo (CC|CXX|AS|LD|AR) '; then
+            echo "error: an up-to-date build would recompile or relink the above"
+            exit 1
+          fi
 
   # Platform-specific builds
   build-platforms:
@@ -188,6 +195,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify public headers compile under strict C99
         run: CC=clang make c99_compat
+
+  # Incremental rebuilds of build-scripts/make/multiconf.make (macOS runs GNU make 3.81)
+  test-build-system:
+    name: Build System (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check that multiconf.make rebuilds exactly what changed
+        run: build-scripts/make/tests/run_tests.sh
 
   # CLI training and format tests (comprehensive, slow)
   test-train:

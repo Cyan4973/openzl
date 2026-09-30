@@ -239,8 +239,8 @@ $(eval $(call c_program_shared_o,stream_dump2, \
 $(eval $(call cxx_program,sddl_compiler, \
 	$(SDDL_COMPILER_DIR)/main.o \
 	$(SDDL_COMPILER_CXXOBJS) \
-	$(ZLCPP_OBJS), \
-	libopenzl.a \
+	$(ZLCPP_OBJS) \
+	$(LIBOBJS), \
 	$(LIBZSTD_A) $(LIBLZ4_A)))
 
 # Selection of gtest units (by file name convention)
@@ -354,6 +354,11 @@ CURL ?= curl
 GIT ?= git
 TAR ?= tar
 
+# Source files of a dependency, in directories $(1) with extensions $(2).
+# Its library is rebuilt when any of them changes; since the sub-build may then
+# find nothing to do, the library is touched afterwards.
+dep_srcs = $(wildcard $(foreach d,$(1),$(addprefix $(d)/*.,$(2))))
+
 # Use this target as a work-around if dependencies are not correctly built
 # automatically.
 .PHONY : builddeps
@@ -405,13 +410,17 @@ $(ZSTD_HEADER):
 $(ZSTD_MAKEFILE): $(ZSTD_HEADER)
 	touch $@
 
+ZSTD_SRCS := $(call dep_srcs,$(ZSTD_LIBDIR) $(ZSTD_LIBDIR)/*,c h S)
+
 $(LIBZSTD_SO) : MAKEOVERRIDES=
-$(LIBZSTD_SO) : $(ZSTD_MAKEFILE)
+$(LIBZSTD_SO) : $(ZSTD_MAKEFILE) $(ZSTD_SRCS)
 	$(MAKE) -C $(ZSTD_LIBDIR) libzstd
+	touch $@
 
 $(LIBZSTD_A) : MAKEOVERRIDES=
-$(LIBZSTD_A) : $(ZSTD_MAKEFILE)
+$(LIBZSTD_A) : $(ZSTD_MAKEFILE) $(ZSTD_SRCS)
 	$(MAKE) -C $(ZSTD_LIBDIR) libzstd.a
+	touch $@
 
 # LZ4
 LZ4_LIBDIR := deps/lz4/lib
@@ -443,13 +452,17 @@ $(LZ4_HEADER):
 $(LZ4_MAKEFILE): $(LZ4_HEADER)
 	touch $@
 
+LZ4_SRCS := $(call dep_srcs,$(LZ4_LIBDIR),c h)
+
 $(LIBLZ4_SO) : MAKEOVERRIDES=
-$(LIBLZ4_SO) : $(LZ4_MAKEFILE)
+$(LIBLZ4_SO) : $(LZ4_MAKEFILE) $(LZ4_SRCS)
 	$(MAKE) -C $(LZ4_LIBDIR) liblz4
+	touch $@
 
 $(LIBLZ4_A) : MAKEOVERRIDES=
-$(LIBLZ4_A) : $(LZ4_MAKEFILE)
+$(LIBLZ4_A) : $(LZ4_MAKEFILE) $(LZ4_SRCS)
 	$(MAKE) -C $(LZ4_LIBDIR) liblz4.a
+	touch $@
 
 # Google Test
 
@@ -476,10 +489,13 @@ $(GTEST_HEADERS):
 		$(MAKE) gtest-fallback; \
 	fi
 
+GTEST_SRCS := $(call dep_srcs,$(addprefix deps/googletest/googletest/,src include/gtest include/gtest/internal include/gtest/internal/custom),cc h)
+
 $(LIBGTEST_A) : MAKEOVERRIDES=
-$(LIBGTEST_A) : $(GTEST_HEADERS)
+$(LIBGTEST_A) : $(GTEST_HEADERS) $(GTEST_SRCS)
 	cd deps/googletest && cmake .
 	$(MAKE) -C deps/googletest
+	touch $@
 
 # XGBoost
 XGBOOST_LIBDIR := deps/xgboost/lib
@@ -538,15 +554,22 @@ ifeq ($(shell uname),Darwin)
 	install_name_tool -id "$(abspath $(XGBOOST_LIBDIR))/libxgboost.dylib" \
 		"$(abspath $(XGBOOST_LIBDIR))/libxgboost.dylib" || true
 endif
+	touch $@
+
+XGBOOST_SRCS := $(call dep_srcs,$(addprefix deps/xgboost/,src src/* src/*/* include/xgboost include/xgboost/* dmlc-core/src dmlc-core/src/* dmlc-core/include/dmlc),cc cu cuh h)
 
 $(LIBXGBOOST_A) : MAKEOVERRIDES=
-$(LIBXGBOOST_A) : $(XGBOOST_HEADER)
+$(LIBXGBOOST_A) : $(XGBOOST_HEADER) $(XGBOOST_SRCS)
 	$(MKDIR) -p $(XGBOOST_LIBDIR)
 	cd deps/xgboost && mkdir -p build && cd build && cmake .. -DBUILD_STATIC_LIB=ON -DUSE_OPENMP=OFF -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=$(abspath $(XGBOOST_LIBDIR)) $(XGBOOST_CMAKE_PLATFORM) && $(MAKE)
 	# xgboost's CMakeLists.txt strips the 'lib' prefix on Windows; rename to match expected name
 	@if [ -f $(XGBOOST_LIBDIR)/xgboost.a ] && [ ! -f $(XGBOOST_LIBDIR)/libxgboost.a ]; then \
 		mv $(XGBOOST_LIBDIR)/xgboost.a $(XGBOOST_LIBDIR)/libxgboost.a; \
 	fi
+	touch $@
 
 # libdmlc.a is built as part of xgboost static build
 $(LIBDMLC_A): $(LIBXGBOOST_A)
+
+# Empty rule: stops make searching implicit rules for each dependency source (~100 failed stat() each)
+$(filter-out $(ZSTD_HEADER) $(LZ4_HEADER) $(GTEST_HEADERS) $(XGBOOST_HEADER),$(ZSTD_SRCS) $(LZ4_SRCS) $(GTEST_SRCS) $(XGBOOST_SRCS)): ;
