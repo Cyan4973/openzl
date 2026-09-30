@@ -118,7 +118,7 @@ define addTargetAsmObject  # targetName, addlDeps
 $$(if $$(filter 2,$$(V)),$$(info $$(call $(0),$(1),$(2))))
 
 .PRECIOUS: $$(CACHE_ROOT)/%/$(1)
-$$(CACHE_ROOT)/%/$(1) : $(1:.o=.S) $(2) | $$(CACHE_ROOT)/%/$(dir $(1))/.
+$$(CACHE_ROOT)/%/$(1) : $(1:.o=.S) $(2) | $$(CACHE_ROOT)/%/$(dir $(1))/. $$$$(MCM_ODEPS_$(1))
 	@echo AS $$@
 	$$(CC) $$(CPPFLAGS) $$(CXXFLAGS) $$(DEPFLAGS) $$(CACHE_ROOT)/$$*/$(1:.o=.d) -c $$< -o $$@
 
@@ -128,7 +128,7 @@ define addTargetCObject  # targetName, addlDeps
 $$(if $$(filter 2,$$(V)),$$(info $$(call $(0),$(1),$(2)))) #debug print
 
 .PRECIOUS: $$(CACHE_ROOT)/%/$(1)
-$$(CACHE_ROOT)/%/$(1) : $(1:.o=.c) $(2) | $$(CACHE_ROOT)/%/$(dir $(1))/.
+$$(CACHE_ROOT)/%/$(1) : $(1:.o=.c) $(2) | $$(CACHE_ROOT)/%/$(dir $(1))/. $$$$(MCM_ODEPS_$(1))
 	@echo CC $$@
 	$$(CC) $$(CPPFLAGS) $$(CFLAGS) $$(DEPFLAGS) $$(CACHE_ROOT)/$$*/$(1:.o=.d) -c $$< -o $$@
 
@@ -138,11 +138,15 @@ define addTargetCxxObject  # targetName, suffix, addlDeps
 $$(if $$(filter 2,$$(V)),$$(info $$(call $(0),$(1),$(2),$(3))))
 
 .PRECIOUS: $$(CACHE_ROOT)/%/$(1)
-$$(CACHE_ROOT)/%/$(1) : $(1:.o=.$(2)) $(3) | $$(CACHE_ROOT)/%/$(dir $(1))/.
+$$(CACHE_ROOT)/%/$(1) : $(1:.o=.$(2)) $(3) | $$(CACHE_ROOT)/%/$(dir $(1))/. $$$$(MCM_ODEPS_$(1))
 	@echo CXX $$@
 	$$(CXX) $$(CPPFLAGS) $$(CXXFLAGS) $$(DEPFLAGS) $$(CACHE_ROOT)/$$*/$(1:.o=.d) -c $$< -o $$@
 
 endef # addTargetCxxObject
+
+# mcm_order_deps - Make objects $(1) wait for files $(2) before compiling, without
+# recompiling when they change: e.g. headers of dependencies fetched on demand.
+mcm_order_deps = $(foreach o,$(1),$(eval MCM_ODEPS_$(o) += $(2)))
 
 # Discover source files and directories
 C_SRCDIRS += .
