@@ -208,6 +208,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check that multiconf.make rebuilds exactly what changed
         run: build-scripts/make/tests/run_tests.sh
+      - name: Check that fetch_dep.sh gets dependencies each possible way
+        run: build-scripts/make/tests/fetch_dep_tests.sh
+      - name: Check that git submodules are pinned to the declared versions
+        run: make check-dependency-pins
 
   # CLI training and format tests (comprehensive, slow)
   test-train:
