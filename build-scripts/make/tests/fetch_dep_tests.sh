@@ -90,3 +90,33 @@ git -C "$WORK/foo" commit -q -a -m v2
 git -C "$WORK/foo" tag -a -m v2 v2
 if "$FETCH" --check-pin foo v2 >/dev/null 2>&1; then die "pin check missed a pin behind its tag"; fi
 printf 'ok: %s\n' "pin check: pinned behind the tag"
+
+# The dependency is fetched again when its declared tag changes, keeping the previous tree
+cd "$WORK/project"
+rm -rf deps
+"$FETCH" foo lib/foo.h v1 "$URL" "$SHA" >/dev/null
+echo edit >> deps/foo/lib/foo.h
+"$FETCH" foo lib/foo.h v2 "$URL" "$SHA" >/dev/null
+check "new tag: fetched again, previous tree kept, one stamp" \
+    "$(cat deps/foo/lib/foo.h) $(tail -n 1 deps/foo.previous/lib/foo.h) $(cd deps && echo .foo-*)" "v2 edit .foo-v2"
+
+# Through fetch_dependency in a Makefile
+rm -rf deps
+cat > Makefile <<EOF
+include $(dirname "$FETCH")/deps.make
+TAG ?= v1
+\$(eval \$(call fetch_dependency,foo,lib/foo.h,\$(TAG),$URL,$SHA))
+copy: deps/foo/lib/foo.h ; cp deps/foo/lib/foo.h copy
+EOF
+make -s copy >/dev/null
+check "make: fetches a missing dependency" "$(cat copy)" "v1"
+check "make: nothing to do once fetched" "$(make -n copy | grep -c -e fetch_dep -e cp || true)" 0
+check "make -n: lists a pending fetch, without fetching" \
+    "$(make -n copy TAG=v2 | grep -c fetch_dep) $(cat deps/foo/lib/foo.h) $(cd deps && echo .foo-*)" "1 v1 .foo-v1"
+# Backdated, so that the refetched header is newer than copy even with 1-second timestamps (macOS make 3.81)
+touch -t 200001010000 deps/foo/lib/foo.h copy
+make -s copy TAG=v2 >/dev/null
+check "make: fetches again when the tag changes, and rebuilds from it in the same run" "$(cat copy)" "v2"
+rm -rf deps/foo
+make -s copy TAG=v2 >/dev/null
+check "make: fetches again when the tree is deleted" "$(cat deps/foo/lib/foo.h)" "v2"
