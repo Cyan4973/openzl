@@ -72,20 +72,24 @@ m prog_a libtest.a >/dev/null
 check "removed source is no longer linked" "$(nm prog_a | grep -c added_symbol || true)" 0
 check "removed source is no longer archived" "$(ar t libtest.a | grep -c '^c\.o$' || true)" 0
 
-mkdir -p .hidden excluded extra/sub
-for f in .hidden/x.c excluded/x.c extra/sub/x.c cachedObjs/x.c; do echo 'int x;' > "$f"; done
+mkdir -p .hidden excluded extra/sub objs
+for f in .hidden/x.c excluded/x.c extra/sub/x.c objs/x.c; do echo 'int x;' > "$f"; done
 SRCS="src/a.c src/b.c src/main.c src/main_cpp.cpp"
 check "sources are discovered below, except in hidden, cache and excluded directories" \
-    "$(m print-srcs MCM_EXCLUDE_DIRS=excluded)" "extra/sub/x.c $SRCS"
+    "$(m print-srcs MCM_CACHE_ROOT=objs MCM_EXCLUDE_DIRS=excluded)" "extra/sub/x.c $SRCS"
 check "C_SRCDIRS adds an excluded directory" \
-    "$(m print-srcs MCM_EXCLUDE_DIRS=excluded C_SRCDIRS=excluded)" "excluded/x.c extra/sub/x.c $SRCS"
-check "MCM_EXCLUDE_DIRS accepts find -path patterns" "$(m print-srcs 'MCM_EXCLUDE_DIRS=excluded */sub')" "$SRCS"
-rm -rf .hidden excluded extra cachedObjs/x.c
+    "$(m print-srcs MCM_CACHE_ROOT=objs MCM_EXCLUDE_DIRS=excluded C_SRCDIRS=excluded)" "excluded/x.c extra/sub/x.c $SRCS"
+check "MCM_EXCLUDE_DIRS accepts find -path patterns" "$(m print-srcs MCM_CACHE_ROOT=objs 'MCM_EXCLUDE_DIRS=excluded */sub')" "$SRCS"
+rm -rf .hidden excluded extra objs
+check "former CACHE_ROOT warns when set for make, not from the environment" \
+    "$(m print-srcs CACHE_ROOT=objs 2>&1 >/dev/null | grep -c MCM_CACHE_ROOT || true) $(CACHE_ROOT=objs m print-srcs 2>&1 >/dev/null | grep -c MCM_CACHE_ROOT || true)" "1 0"
 
-DEFAULT_CONFIG=$(objdir prog_a | cut -d/ -f1-2)
+DEFAULT_CONFIG=$(objdir prog_a)
+DEFAULT_CONFIG=${DEFAULT_CONFIG%/*}
 m all CFLAGS=-DOTHER >/dev/null
 check "depfiles of other configurations are not read" \
     "$(m print-depfiles | tr ' ' '\n' | grep -c -v -e "^$DEFAULT_CONFIG/" -e '^$' || true)" 0
 
+mkdir -p cachedObjs/old
 m clean >/dev/null
-check "clean removes all build outputs" "$(find . -mindepth 1 -maxdepth 1 | sort | tr '\n' ' ')" "./Makefile ./src "
+check "clean removes all build outputs, and the cache directory of earlier versions" "$(find . -mindepth 1 -maxdepth 1 | sort | tr '\n' ' ')" "./Makefile ./src "
