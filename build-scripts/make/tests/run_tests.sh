@@ -72,6 +72,16 @@ m prog_a libtest.a >/dev/null
 check "removed source is no longer linked" "$(nm prog_a | grep -c added_symbol || true)" 0
 check "removed source is no longer archived" "$(ar t libtest.a | grep -c '^c\.o$' || true)" 0
 
+mkdir -p .hidden excluded extra/sub
+for f in .hidden/x.c excluded/x.c extra/sub/x.c cachedObjs/x.c; do echo 'int x;' > "$f"; done
+SRCS="src/a.c src/b.c src/main.c src/main_cpp.cpp"
+check "sources are discovered below, except in hidden, cache and excluded directories" \
+    "$(m print-srcs MCM_EXCLUDE_DIRS=excluded)" "extra/sub/x.c $SRCS"
+check "C_SRCDIRS adds an excluded directory" \
+    "$(m print-srcs MCM_EXCLUDE_DIRS=excluded C_SRCDIRS=excluded)" "excluded/x.c extra/sub/x.c $SRCS"
+check "MCM_EXCLUDE_DIRS accepts find -path patterns" "$(m print-srcs 'MCM_EXCLUDE_DIRS=excluded */sub')" "$SRCS"
+rm -rf .hidden excluded extra cachedObjs/x.c
+
 DEFAULT_CONFIG=$(objdir prog_a | cut -d/ -f1-2)
 m all CFLAGS=-DOTHER >/dev/null
 check "depfiles of other configurations are not read" \

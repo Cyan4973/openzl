@@ -9,8 +9,6 @@ CFLAGS ?= -O1
 CXXFLAGS ?= -O1
 
 MULTICONF ?= ../../multiconf.make
-C_SRCDIRS := src
-CXX_SRCDIRS := src
 include $(MULTICONF)
 
 LIB_OBJS := $(patsubst %.c,%.o,$(filter-out src/main.c,$(wildcard src/*.c)))
@@ -28,3 +26,7 @@ all: prog_a prog_b prog_fast prog_cxx libtest.a
 .PHONY: print-depfiles
 print-depfiles:
 	@echo $(MCM_DEPFILES)
+
+.PHONY: print-srcs
+print-srcs:
+	@echo $(C_SRCS) $(CPP_SRCS)
