@@ -66,48 +66,15 @@ XGBOOST_HEADER := deps/xgboost/include/xgboost/c_api.h
 # E.g.qemu
 EXEC_PREFIX ?=
 
-# Source directories of each component
-LIBROOT := src
-LIBDIRS := $(shell find $(LIBROOT) -type d)
-TESTROOT:= tests
-TESTSDIRS:= $(shell find $(TESTROOT) -type d)
-CLIDIR  := cli
-CLIDIRS := $(CLIDIR) $(CLIDIR)/args $(CLIDIR)/commands $(CLIDIR)/utils
-CLI_TEST_DIRS := $(CLIDIR)/tests $(CLIDIR)/tests/unittest $(CLIDIR)/training/tests
-ARGDIR  := tools/arg
-IODIR := tools/io
-LOGGERDIR := tools/logger
-STREAMDUMPDIR := tools/streamdump
-UNITBENCH_ROOT:= benchmark/unitBench
-UNITBENCH_DIRS:= $(shell find $(UNITBENCH_ROOT) -type d)
-CUSTOMPARSERSDIR := custom_parsers
-CSVDIR := $(CUSTOMPARSERSDIR)/csv
-PROFILES_SDDL_DIR := $(CUSTOMPARSERSDIR)/sddl
-PARQUETDIR := $(CUSTOMPARSERSDIR)/parquet
-SHARED_COMPONENTSDIR := $(CUSTOMPARSERSDIR)/shared_components
-VISUALIZER_CPPDIR := tools/zl_visualizer/compression_introspection
-ZLCPP_ROOT := cpp/src
-ZLCPP_DIRS := $(shell find $(ZLCPP_ROOT) -type d)
-ZLCPP_TEST_DIR := cpp/tests
-TRAINING_ROOTS := tools/training/clustering tools/training/ace tools/training/graph_mutation tools/training/utils tools/training/sample_collection tools/training/dict tools/training/lz
-TRAINING_DIRS := tools/training $(shell find $(TRAINING_ROOTS) -type d)
-TRAINING_TEST_DIRS := $(shell find tools/training/tests -type d)
-SDDL_COMPILER_DIR := tools/sddl/compiler
-SDDL2_COMPILER_DIR := tools/sddl2/compiler
-SDDL2_COMPILER_DIRS := $(filter-out %/tests,$(shell find $(SDDL2_COMPILER_DIR) -type d))
-SDDL2_ASSEMBLER_DIR := tools/sddl2/assembler
-ML_SELECTOR_DIR := tools/ml_selector
-ML_SELECTOR_TESTS_DIR := $(ML_SELECTOR_DIR)/tests
-TEST_REGISTRY_DIRS := tests/registry tests/registry/components
+# Discovered objects below directories $(1), except those of tests/ subdirectories
+objs_below = $(foreach o,$(filter $(addsuffix /%,$(1)),$(C_OBJS) $(CXX_OBJS) $(ASM_OBJS)),$(if $(findstring /tests/,$(o)),,$(o)))
 
 
 # =====================================
 # library
 # =====================================
 
-LIBCSRCS := $(wildcard $(addsuffix /*.c, $(LIBDIRS)))
-LIBASMSRCS := $(wildcard $(addsuffix /*.S, $(LIBDIRS)))
-LIBOBJS := $(patsubst %.c,%.o,$(LIBCSRCS)) $(patsubst %.S,%.o,$(LIBASMSRCS))
+LIBOBJS := $(call objs_below,src)
 
 libopenzl.a:
 $(eval $(call static_library,libopenzl.a,$(LIBOBJS),$(LIBZSTD_A) $(LIBLZ4_A)))
@@ -125,34 +92,13 @@ lib: libopenzl.a libopenzl.so
 .PHONY: all
 all : lib gtests unitBench zli sddl_compiler stream_dump2 examples
 
-# Define a function to generate a list of C++ object files from directory
-cxx_objs = $(patsubst %.cpp,%.o,$(wildcard $(addsuffix /*.cpp, $(1))))
-c_objs = $(patsubst %.c,%.o,$(wildcard $(addsuffix /*.c, $(1))))
-
-ZLCPP_OBJS := $(call cxx_objs,$(ZLCPP_DIRS))
-CLI_CXXOBJS := $(filter-out %zli.o,$(foreach DIR,$(CLIDIRS),$(call cxx_objs,$(DIR))))
-ARG_CXXOBJS := $(call cxx_objs,$(ARGDIR))
-LOGGER_CXXOBJS := $(call cxx_objs,$(LOGGERDIR))
-STREAMDUMP_COBJS := $(call c_objs,$(STREAMDUMPDIR))
-CUSTOM_PARSERS_COBJS := $(call c_objs,$(CUSTOMPARSERSDIR))
-CUSTOM_PARSERS_CXXOBJS := $(call cxx_objs,$(CUSTOMPARSERSDIR))
+# Source directories of zli, besides the library
+ZLI_DIRS := cli custom_parsers cpp/src tools/arg tools/io tools/logger tools/ml_selector \
+	tools/sddl/compiler tools/sddl2/assembler tools/sddl2/compiler tools/training \
+	tools/zl_visualizer/compression_introspection
+# Objects of zli except its main, also linked into gtests.
 # Exclude pytorch_model_compressor.cpp because it depends on Folly.
-CUSTOM_PARSERS_CXXOBJS := $(filter-out %/pytorch_model_compressor.o,$(CUSTOM_PARSERS_CXXOBJS))
-SHARED_COMPONENTS_CXXOBJS := $(call cxx_objs,$(SHARED_COMPONENTSDIR))
-CSV_CXXOBJS := $(call cxx_objs,$(CSVDIR))
-CSV_COBJS := $(call c_objs,$(CSVDIR))
-PARQUET_CXXOBJS := $(call cxx_objs,$(PARQUETDIR))
-PARQUET_COBJS := $(call c_objs,$(PARQUETDIR))
-PROFILES_SDDL_COBJS := $(call c_objs,$(PROFILES_SDDL_DIR))
-IO_CXXOBJS := $(call cxx_objs,$(IODIR))
-VISUALIZER_CXXOBJS := $(call cxx_objs,$(VISUALIZER_CPPDIR))
-TRAINING_CXXOBJS := $(call cxx_objs,$(TRAINING_DIRS))
-TRAINING_TEST_CXXOBJS := $(call cxx_objs,$(TRAINING_TEST_DIRS))
-SDDL_COMPILER_CXXOBJS := $(filter-out %main.o, $(call cxx_objs,$(SDDL_COMPILER_DIR)))
-SDDL2_COMPILER_CXXOBJS := $(filter-out %main.o, $(call cxx_objs,$(SDDL2_COMPILER_DIRS)))
-SDDL2_ASSEMBLER_CXXOBJS :=  $(filter-out %main.o, $(call cxx_objs,$(SDDL2_ASSEMBLER_DIR)))
-ML_SELECTOR_COBJS := $(call c_objs,$(ML_SELECTOR_DIR))
-ML_SELECTOR_CXXOBJS := $(call cxx_objs,$(ML_SELECTOR_DIR))
+ZLI_COMMON_OBJS := $(filter-out cli/zli.o %/main.o custom_parsers/pytorch_model_compressor.o,$(call objs_below,$(ZLI_DIRS))) $(LIBOBJS)
 
 ML_SELECTOR_CPPFLAGS := -Ideps/xgboost/include -Ideps/xgboost/dmlc-core/include -DDMLC_LOG_STACK_TRACE=0 -DOPENZL_HAS_ML_SELECTOR_TRAINER=1
 
@@ -166,28 +112,7 @@ gtests: CPPFLAGS += $(ML_SELECTOR_CPPFLAGS) -DZDICT_STATIC_LINKING_ONLY
 gtests: LDLIBS += $(XGBOOST_LDLIBS)
 
 $(eval $(call cxx_program,zli, \
-	cli/zli.o \
-	$(CLI_CXXOBJS) \
-	$(ARG_CXXOBJS) \
-	$(LOGGER_CXXOBJS) \
-	$(CUSTOM_PARSERS_COBJS) \
-	$(CUSTOM_PARSERS_CXXOBJS) \
-	$(SHARED_COMPONENTS_CXXOBJS) \
-	$(CSV_COBJS) \
-	$(CSV_CXXOBJS) \
-	$(PROFILES_SDDL_COBJS) \
-	$(PARQUET_COBJS) \
-	$(PARQUET_CXXOBJS) \
-	$(VISUALIZER_CXXOBJS) \
-	$(IO_CXXOBJS) \
-	$(TRAINING_CXXOBJS) \
-	$(SDDL_COMPILER_CXXOBJS) \
-	$(SDDL2_COMPILER_CXXOBJS) \
- 	$(SDDL2_ASSEMBLER_CXXOBJS) \
-	$(ML_SELECTOR_COBJS) \
-	$(ML_SELECTOR_CXXOBJS) \
-	$(ZLCPP_OBJS) \
-	$(LIBOBJS), \
+	cli/zli.o $(ZLI_COMMON_OBJS), \
 	$(LIBZSTD_A) $(LIBLZ4_A) $(LIBXGBOOST_A) $(LIBDMLC_A)))
 
 .PHONY: examples
@@ -230,17 +155,14 @@ test-zs2 : examples
 
 # ********     Tools     ********
 
-UNITBENCH_COBJS := $(foreach DIR,$(UNITBENCH_DIRS),$(call c_objs,$(DIR)))
-$(eval $(call c_program_shared_o,unitBench,tools/time/timefn.o tools/fileio/fileio.o $(UNITBENCH_COBJS) $(LIBOBJS),$(LIBZSTD_A) $(LIBLZ4_A)))
+$(eval $(call c_program_shared_o,unitBench,tools/time/timefn.o tools/fileio/fileio.o $(call objs_below,benchmark/unitBench) $(LIBOBJS),$(LIBZSTD_A) $(LIBLZ4_A)))
 
 stream_dump2:
 $(eval $(call c_program_shared_o,stream_dump2, \
-    $(STREAMDUMP_COBJS) tools/fileio/fileio.o $(LIBOBJS),$(LIBZSTD_A) $(LIBLZ4_A)))
+    $(call objs_below,tools/streamdump) tools/fileio/fileio.o $(LIBOBJS),$(LIBZSTD_A) $(LIBLZ4_A)))
 
 $(eval $(call cxx_program,sddl_compiler, \
-	$(SDDL_COMPILER_DIR)/main.o \
-	$(SDDL_COMPILER_CXXOBJS) \
-	$(ZLCPP_OBJS) \
+	$(call objs_below,tools/sddl/compiler cpp/src) \
 	$(LIBOBJS), \
 	$(LIBZSTD_A) $(LIBLZ4_A)))
 
@@ -251,7 +173,7 @@ GTEST_FILEO += $(filter %Test.o,$(CXX_FILE_OBJS))
 GTEST_FILTER_LIST := VersionTest.o NoIntrospectionTest.o
 GTEST_FILEO := $(filter-out $(GTEST_FILTER_LIST),$(GTEST_FILEO))
 
-ALL_TEST_OBJS := $(patsubst %.cpp,%.o,$(foreach dir,$(TESTSDIRS) $(CLI_TEST_DIRS) $(ML_SELECTOR_TESTS_DIR),$(wildcard $(dir)/*.cpp)))
+ALL_TEST_OBJS := $(filter tests/% cli/tests/% tools/ml_selector/tests/%,$(CXX_OBJS))
 GTEST_OBJS := $(foreach name,$(GTEST_FILEO),$(filter %/$(name),$(ALL_TEST_OBJS)))
 
 # Other module objects used in gtests
@@ -263,9 +185,8 @@ DATAGEN_OBJS := \
 SERIALIZATION_TEST_OBJS := \
 	tests/serialization/GraphBuilder.o \
 	tests/serialization/GraphBuilderUtils.o
-TEST_REGISTRY_SRCS = $(wildcard $(addsuffix /*.cpp, $(TEST_REGISTRY_DIRS)))
-TEST_REGISTRY_OBJS = $(patsubst %.cpp,%.o,$(TEST_REGISTRY_SRCS))
-ZLCPP_TEST_OBJS := $(call cxx_objs,$(ZLCPP_TEST_DIR))
+TEST_REGISTRY_OBJS := $(filter tests/registry/%,$(CXX_OBJS))
+ZLCPP_TEST_OBJS := $(filter-out cpp/tests/experimental/%,$(filter cpp/tests/%,$(CXX_OBJS)))
 
 ALL_GTESTS_OBJS := \
 	tests/gtest_main.o \
@@ -278,34 +199,14 @@ ALL_GTESTS_OBJS := \
 	tests/compress/ml_selectors/test_zstrong_ml_core_models.o \
 	$(GTEST_OBJS) \
 	$(ZLCPP_TEST_OBJS) \
-	$(CLI_CXXOBJS) \
-	$(ARG_CXXOBJS) \
-	$(LOGGER_CXXOBJS) \
-	$(CUSTOM_PARSERS_COBJS) \
-	$(CUSTOM_PARSERS_CXXOBJS) \
-	$(SHARED_COMPONENTS_CXXOBJS) \
-	$(CSV_CXXOBJS) \
-	$(CSV_COBJS) \
-	$(PROFILES_SDDL_COBJS) \
-	$(PARQUET_CXXOBJS) \
-	$(PARQUET_COBJS) \
-	$(VISUALIZER_CXXOBJS) \
-	$(IO_CXXOBJS) \
-	$(TRAINING_CXXOBJS) \
-	$(SDDL_COMPILER_CXXOBJS) \
-	$(SDDL2_COMPILER_CXXOBJS) \
-	$(SDDL2_ASSEMBLER_CXXOBJS) \
-	$(ML_SELECTOR_COBJS) \
-	$(ML_SELECTOR_CXXOBJS) \
 	$(DATAGEN_OBJS) \
 	$(SERIALIZATION_TEST_OBJS) \
 	$(TEST_REGISTRY_OBJS) \
-	$(ZLCPP_OBJS) \
-	$(LIBOBJS)
+	$(ZLI_COMMON_OBJS)
 
 # Objects wait for the headers of the dependencies they include, which are fetched on demand
 $(call mcm_order_deps,$(C_OBJS) $(CPP_OBJS),$(ZSTD_HEADER) $(LZ4_HEADER))
-$(call mcm_order_deps,$(ML_SELECTOR_COBJS) $(ML_SELECTOR_CXXOBJS),$(XGBOOST_HEADER))
+$(call mcm_order_deps,$(call objs_below,tools/ml_selector),$(XGBOOST_HEADER))
 $(call mcm_order_deps,$(filter tests/% %/tests/%,$(ALL_GTESTS_OBJS)),$(GTEST_HEADERS))
 
 gtests: $(LIBGTEST_A) $(LIBZSTD_A) $(LIBLZ4_A) $(LIBXGBOOST_A)
@@ -331,7 +232,7 @@ zs2_selector:
 $(eval $(call c_program_shared_o,zs2_selector,examples/zs2_selector.o tools/fileio/fileio.o $(LIBOBJS),$(LIBZSTD_A) $(LIBLZ4_A)))
 
 zs2_round_trip:
-$(eval $(call cxx_program_shared_o,zs2_round_trip,tests/round_trip.o tools/fileio/fileio.o $(SHARED_COMPONENTS_CXXOBJS) $(LIBOBJS),$(LIBZSTD_A) $(LIBLZ4_A)))
+$(eval $(call cxx_program_shared_o,zs2_round_trip,tests/round_trip.o tools/fileio/fileio.o $(call objs_below,custom_parsers/shared_components) $(LIBOBJS),$(LIBZSTD_A) $(LIBLZ4_A)))
 
 # ********     Compatibility tests     ********
 
