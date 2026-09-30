@@ -80,7 +80,7 @@ ifeq ($(HAVE_HASH),0)
   MCM_GLOBAL_DIR := generic
   mcm_subdirs = $(1)/bin
 else
-  MCM_GLOBAL_DIR := $(firstword $(shell echo $(MCM_COMPILE_KEY) $(LDFLAGS) $(LDLIBS) | $(HASH)))
+  MCM_GLOBAL_DIR := $(firstword $(shell echo $(MCM_COMPILE_KEY) | $(HASH)))
   # mcm_subdirs - <hash of $(2)>/<hash of $(3)>, in a single shell call.
   # md5sum follows each hash with `-`, or `*-` in binary mode (Windows).
   mcm_subdirs = $(call mcm_join_dirs,$(filter-out - *-,$(shell echo $(2) | $(HASH); echo $(3) | $(HASH))))
