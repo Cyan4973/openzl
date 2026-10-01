@@ -2,8 +2,7 @@
 
 # Contain project wide settings
 # such as default compilation flags
-# build modes
-# and paths to source files.
+# and build modes.
 
 # Enable parallel builds by default (override with ZL_JOBS=N or make -jN)
 ZL_JOBS ?= $(shell nproc 2>/dev/null || echo 4)
@@ -145,81 +144,6 @@ help:
 	@echo "  make BUILD_TYPE=DEV             # Force DEV mode for all targets"
 	@echo "  make show-config BUILD_TYPE=DEV # Show configuration for DEV type"
 
-# Paths to source files
-EXROOT  := examples
-EXDIRS  := $(shell find $(EXROOT) -type d)
-LIBROOT := src
-LIBDIRS := $(shell find $(LIBROOT) -type d)
-TESTROOT:= tests
-TESTSDIRS:= $(shell find $(TESTROOT) -type d)
-CLIDIR  := cli
-CLIDIRS := $(CLIDIR) $(CLIDIR)/args $(CLIDIR)/commands $(CLIDIR)/utils
-CLI_TEST_DIRS := $(CLIDIR)/tests $(CLIDIR)/tests/unittest $(CLIDIR)/training/tests
-CLI_DIRS := $(CLIDIRS) $(CLI_TEST_DIRS)
-ARGDIR  := tools/arg
-FILEIODIR := tools/fileio
-IODIR := tools/io
-LOGGERDIR := tools/logger
-TIMEDIR := tools/time
-STREAMDUMPDIR := tools/streamdump
-UNITBENCH_ROOT:= benchmark/unitBench
-UNITBENCH_DIRS:= $(shell find $(UNITBENCH_ROOT) -type d)
-CUSTOMPARSERSDIR := custom_parsers
-CSVDIR := $(CUSTOMPARSERSDIR)/csv
-PROFILES_SDDL_DIR := $(CUSTOMPARSERSDIR)/sddl
-PARQUETDIR := $(CUSTOMPARSERSDIR)/parquet
-SHARED_COMPONENTSDIR := $(CUSTOMPARSERSDIR)/shared_components
-VISUALIZER_CPPDIR := tools/zl_visualizer/compression_introspection
-ZLCPP_ROOT := cpp/src
-ZLCPP_DIRS := $(shell find $(ZLCPP_ROOT) -type d)
-ZLCPP_TEST_DIR := cpp/tests
-TRAINING_ROOTS := tools/training/clustering tools/training/ace tools/training/graph_mutation tools/training/utils tools/training/sample_collection tools/training/dict tools/training/lz
-TRAINING_DIRS := tools/training $(shell find $(TRAINING_ROOTS) -type d)
-TRAINING_TEST_DIRS := $(shell find tools/training/tests -type d)
-SDDL_COMPILER_DIR := tools/sddl/compiler
-SDDL_COMPILER_TESTS_DIR := $(SDDL_COMPILER_DIR)/tests
-SDDL2_COMPILER_DIR := tools/sddl2/compiler
-SDDL2_COMPILER_DIRS := $(filter-out %/tests,$(shell find $(SDDL2_COMPILER_DIR) -type d))
-SDDL2_COMPILER_TESTS_DIR := $(SDDL2_COMPILER_DIR)/tests
-SDDL2_ASSEMBLER_DIR := tools/sddl2/assembler
-SDDL2_ASSEMBLER_TESTS_DIR := $(SDDL2_ASSEMBLER_DIR)/tests
-ML_SELECTOR_DIR := tools/ml_selector
-ML_SELECTOR_TESTS_DIR := $(ML_SELECTOR_DIR)/tests
-TEST_REGISTRY_DIRS := tests/registry tests/registry/components
-
-# input for multiconf.make
-C_SRCDIRS   := $(LIBDIRS) $(EXDIRS) $(TESTSDIRS) $(FILEIODIR) $(TIMEDIR) $(STREAMDUMPDIR) $(UNITBENCH_DIRS) $(CUSTOMPARSERSDIR) $(CSVDIR) $(PROFILES_SDDL_DIR) $(PARQUETDIR) $(CLI_DIRS) $(ML_SELECTOR_DIR)
-ASM_SRCDIRS := $(LIBDIRS)
-CXX_SRCDIRS := \
-	$(CLIDIRS) \
-	$(ARGDIR) \
-	$(TESTSDIRS) \
-	$(FILEIODIR) \
-	$(TIMEDIR) \
-	$(LOGGERDIR) \
-	$(CUSTOMPARSERSDIR) \
-	$(CSVDIR) \
-	$(PROFILES_SDDL_DIR) \
-	$(PARQUETDIR) \
-	$(SHARED_COMPONENTSDIR) \
-	$(VISUALIZER_CPPDIR) \
-	$(IODIR) \
-	$(ZLCPP_DIRS) \
-	$(ZLCPP_TEST_DIR) \
-	$(TRAINING_DIRS) \
-	$(TRAINING_TEST_DIRS) \
-	$(SDDL_COMPILER_DIR) \
-	$(SDDL_COMPILER_TESTS_DIR) \
-	$(SDDL2_COMPILER_DIRS) \
-	$(SDDL2_COMPILER_TESTS_DIR) \
-	$(SDDL2_ASSEMBLER_DIR) \
-	$(SDDL2_ASSEMBLER_TESTS_DIR) \
-	$(CLI_DIRS) \
-	$(CLI_TEST_DIRS) \
-	$(ML_SELECTOR_DIR) \
-	$(ML_SELECTOR_TESTS_DIR) \
-	$(TEST_REGISTRY_DIRS)
-
 # Use response file for link stage for environments with small command line limit (<= 32KB)
 UNAME := $(shell sh -c 'MSYSTEM="MSYS" uname')
 SMALL_CMD_LINE ?= MSYS_NT% CYGWIN_NT%
@@ -232,3 +156,6 @@ EXE :=
 ifneq (,$(filter $(SMALL_CMD_LINE),$(UNAME)))
 EXE := .exe
 endif
+
+# Directories without sources built by this Makefile, skipped by multiconf.make
+MCM_EXCLUDE_DIRS := deps doc py */node_modules

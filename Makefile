@@ -66,6 +66,41 @@ XGBOOST_HEADER := deps/xgboost/include/xgboost/c_api.h
 # E.g.qemu
 EXEC_PREFIX ?=
 
+# Source directories of each component
+LIBROOT := src
+LIBDIRS := $(shell find $(LIBROOT) -type d)
+TESTROOT:= tests
+TESTSDIRS:= $(shell find $(TESTROOT) -type d)
+CLIDIR  := cli
+CLIDIRS := $(CLIDIR) $(CLIDIR)/args $(CLIDIR)/commands $(CLIDIR)/utils
+CLI_TEST_DIRS := $(CLIDIR)/tests $(CLIDIR)/tests/unittest $(CLIDIR)/training/tests
+ARGDIR  := tools/arg
+IODIR := tools/io
+LOGGERDIR := tools/logger
+STREAMDUMPDIR := tools/streamdump
+UNITBENCH_ROOT:= benchmark/unitBench
+UNITBENCH_DIRS:= $(shell find $(UNITBENCH_ROOT) -type d)
+CUSTOMPARSERSDIR := custom_parsers
+CSVDIR := $(CUSTOMPARSERSDIR)/csv
+PROFILES_SDDL_DIR := $(CUSTOMPARSERSDIR)/sddl
+PARQUETDIR := $(CUSTOMPARSERSDIR)/parquet
+SHARED_COMPONENTSDIR := $(CUSTOMPARSERSDIR)/shared_components
+VISUALIZER_CPPDIR := tools/zl_visualizer/compression_introspection
+ZLCPP_ROOT := cpp/src
+ZLCPP_DIRS := $(shell find $(ZLCPP_ROOT) -type d)
+ZLCPP_TEST_DIR := cpp/tests
+TRAINING_ROOTS := tools/training/clustering tools/training/ace tools/training/graph_mutation tools/training/utils tools/training/sample_collection tools/training/dict tools/training/lz
+TRAINING_DIRS := tools/training $(shell find $(TRAINING_ROOTS) -type d)
+TRAINING_TEST_DIRS := $(shell find tools/training/tests -type d)
+SDDL_COMPILER_DIR := tools/sddl/compiler
+SDDL2_COMPILER_DIR := tools/sddl2/compiler
+SDDL2_COMPILER_DIRS := $(filter-out %/tests,$(shell find $(SDDL2_COMPILER_DIR) -type d))
+SDDL2_ASSEMBLER_DIR := tools/sddl2/assembler
+ML_SELECTOR_DIR := tools/ml_selector
+ML_SELECTOR_TESTS_DIR := $(ML_SELECTOR_DIR)/tests
+TEST_REGISTRY_DIRS := tests/registry tests/registry/components
+
+
 # =====================================
 # library
 # =====================================
