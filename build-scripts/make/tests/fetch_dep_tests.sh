@@ -90,3 +90,31 @@ git -C "$WORK/foo" commit -q -a -m v2
 git -C "$WORK/foo" tag -a -m v2 v2
 if "$FETCH" --check-pin foo v2 >/dev/null 2>&1; then die "pin check missed a pin behind its tag"; fi
 printf 'ok: %s\n' "pin check: pinned behind the tag"
+
+# The dependency is fetched again when its declared tag changes
+cd "$WORK/project"
+rm -rf deps
+"$FETCH" foo lib/foo.h v1 "$URL" "$SHA" >/dev/null
+"$FETCH" foo lib/foo.h v2 "$URL" "$SHA" >/dev/null
+check "new tag: fetched again, one stamp" "$(cat deps/foo/lib/foo.h) $(cd deps && echo .foo-*)" "v2 .foo-v2"
+
+# Through fetch_dependency in a Makefile
+rm -rf deps
+cat > Makefile <<EOF
+include $(dirname "$FETCH")/deps.make
+TAG ?= v1
+\$(eval \$(call fetch_dependency,foo,lib/foo.h,\$(TAG),$URL,$SHA))
+copy: deps/foo/lib/foo.h ; cp deps/foo/lib/foo.h copy
+EOF
+make -s copy >/dev/null
+check "make: fetches a missing dependency" "$(cat copy)" "v1"
+check "make: nothing to do once fetched" "$(make -n copy | grep -c -e fetch_dep -e cp || true)" 0
+if make -s copy TAG=v2 >/dev/null 2>err; then die "make built from a dependency at another tag"; fi
+check "make: a new tag stops the build, naming cleandep-foo" "$(grep -c 'make cleandep-foo' err) $(cat deps/foo/lib/foo.h)" "1 v1"
+make -s cleandep-foo >/dev/null
+# Backdated, so that the refetched header is newer than copy even with 1-second timestamps (macOS make 3.81)
+touch -t 200001010000 copy
+make -s copy TAG=v2 >/dev/null
+check "make cleandep-foo: the next build fetches the new tag, and rebuilds from it" "$(cat copy)" "v2"
+make -s cleandeps >/dev/null
+check "make cleandeps: removes dependencies and stamps" "$(ls -A deps)" ""

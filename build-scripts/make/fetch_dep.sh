@@ -5,7 +5,7 @@
 #   1. its git submodule, within a git checkout
 #   2. a git clone of TAG (e.g. in fbcode, which is not a git checkout)
 #   3. the tarball at URL, checked against SHA256
-# A way succeeds only if it provides deps/NAME/FILE.
+# A way succeeds only if it provides deps/NAME/FILE. It then records TAG in the stamp deps/.NAME-TAG.
 # Usage: fetch_dep.sh NAME FILE TAG URL SHA256 [--recursive]
 #        fetch_dep.sh --check-pin NAME TAG
 # Run from the directory holding .gitmodules. GIT, CURL, WGET and TAR override the tools.
@@ -42,6 +42,7 @@ fi
 name=$1 file=$2 tag=$3 url=$4 sha256=$5 recursive=${6:-}
 dir=deps/$name
 tmp=deps/.$name.tmp
+stamp=deps/.$name-$tag
 tarball=deps/$(basename "$url")
 
 rc=
@@ -49,18 +50,24 @@ for sig in 1 2 3 13 15; do eval "trap 'exit $((sig + 128))' $sig"; done
 trap 'rc=$?; set +e; rm -rf "$tmp" "$tarball.part"; exit $rc' EXIT
 mkdir -p deps
 
+fetched() {
+    rm -f "deps/.$name"-*
+    touch "$stamp"
+    exit 0
+}
+
 # Replaces $dir with the fetched tree, in one step
 install_tmp() {
     rm -rf "$dir"
     mv "$tmp" "$dir"
-    exit 0
+    fetched
 }
 
 # git reports success when it skips a submodule (e.g. `update = none`), hence the check of $file
 if $GIT rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
     $GIT submodule update --init --single-branch --depth 1 ${recursive:+"$recursive"} "$dir" &&
     [ -f "$dir/$file" ]; then
-    exit 0
+    fetched
 fi
 # Shallow clone of $tag into $tmp. `git clone --branch` would warn about annotated tags.
 clone_tag() {
@@ -78,8 +85,8 @@ if repo=$(repo_url "$name"); then
     fi
 fi
 
-echo "Downloading $url"
 if [ ! -f "$tarball" ] || [ "$(sha256_of "$tarball")" != "$sha256" ]; then
+    echo "Downloading $url"
     rm -f "$tarball"
     $CURL -fsSL -o "$tarball.part" "$url" || $WGET -q -O "$tarball.part" "$url" ||
         die "could not fetch $dir. Fetch it by hand, with one of:
@@ -91,6 +98,6 @@ if [ ! -f "$tarball" ] || [ "$(sha256_of "$tarball")" != "$sha256" ]; then
 fi
 rm -rf "$tmp"
 mkdir "$tmp"
-$TAR -xzf "$tarball" -C "$tmp" --strip-components=1
+$TAR -xzmf "$tarball" -C "$tmp" --strip-components=1
 [ -f "$tmp/$file" ] || die "$url does not contain $file"
 install_tmp
