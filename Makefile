@@ -40,15 +40,12 @@ endif
 ifneq (,$(filter Windows%,$(OS)))
 LIBZSTD_SO := deps/zstd/lib/dll/libzstd.dll
 LIBLZ4_SO := deps/lz4/lib/liblz4.dll
-LIBXGBOOST_SO := deps/xgboost/lib/libxgboost.dll
 else ifeq ($(shell uname), Darwin)
 LIBZSTD_SO := deps/zstd/lib/libzstd.dylib
 LIBLZ4_SO := deps/lz4/lib/liblz4.dylib
-LIBXGBOOST_SO := deps/xgboost/lib/libxgboost.dylib
 else
 LIBZSTD_SO := deps/zstd/lib/libzstd.so
 LIBLZ4_SO := deps/lz4/lib/liblz4.so
-LIBXGBOOST_SO := deps/xgboost/lib/libxgboost.so
 endif
 
 LIBZSTD_A := deps/zstd/lib/libzstd.a
@@ -174,7 +171,7 @@ GTEST_FILTER_LIST := VersionTest.o NoIntrospectionTest.o
 GTEST_FILEO := $(filter-out $(GTEST_FILTER_LIST),$(GTEST_FILEO))
 
 ALL_TEST_OBJS := $(filter tests/% cli/tests/% tools/ml_selector/tests/%,$(CXX_OBJS))
-GTEST_OBJS := $(foreach name,$(GTEST_FILEO),$(filter %/$(name),$(ALL_TEST_OBJS)))
+GTEST_OBJS := $(filter $(addprefix %/,$(GTEST_FILEO)),$(ALL_TEST_OBJS))
 
 # Other module objects used in gtests
 DATAGEN_OBJS := \
@@ -339,10 +336,6 @@ $(eval $(call fetch_dependency,xgboost,include/xgboost/c_api.h,v$(XGBOOST_VERSIO
 
 XGBOOST_LIBDIR := deps/xgboost/lib
 
-# Common CMake flags for xgboost shared library build
-XGBOOST_CMAKE_COMMON := -DBUILD_STATIC_LIB=OFF -DUSE_OPENMP=OFF \
-	-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$(abspath $(XGBOOST_LIBDIR))
-
 # Platform-specific CMake flags for xgboost
 XGBOOST_CMAKE_PLATFORM :=
 XGBOOST_LDFLAGS :=
@@ -354,23 +347,7 @@ ifneq (,$(filter $(SMALL_CMD_LINE),$(UNAME)))
         -DCMAKE_SHARED_LINKER_FLAGS="-lws2_32"
     XGBOOST_LDFLAGS += -L$(abspath $(XGBOOST_LIBDIR))
     XGBOOST_LDLIBS += -lws2_32
-else ifeq ($(shell uname),Darwin)
-    # macOS: Set install_name to absolute path so dyld can find the library
-    XGBOOST_CMAKE_PLATFORM := -DCMAKE_INSTALL_NAME_DIR=$(abspath $(XGBOOST_LIBDIR)) \
-        -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_MACOSX_RPATH=ON
 endif
-
-# Build shared library only after static library is done (to avoid parallel cmake conflicts)
-$(LIBXGBOOST_SO) : MAKEOVERRIDES=
-$(LIBXGBOOST_SO) : $(LIBXGBOOST_A)
-	$(MKDIR) -p $(XGBOOST_LIBDIR)
-	cd deps/xgboost && mkdir -p build-shared && cd build-shared && \
-		cmake .. $(XGBOOST_CMAKE_COMMON) $(XGBOOST_CMAKE_PLATFORM) && $(MAKE)
-ifeq ($(shell uname),Darwin)
-	install_name_tool -id "$(abspath $(XGBOOST_LIBDIR))/libxgboost.dylib" \
-		"$(abspath $(XGBOOST_LIBDIR))/libxgboost.dylib" || true
-endif
-	touch $@
 
 XGBOOST_SRCS := $(call dep_srcs,$(addprefix deps/xgboost/,src src/* src/*/* include/xgboost include/xgboost/* dmlc-core/src dmlc-core/src/* dmlc-core/include/dmlc),cc cu cuh h)
 
