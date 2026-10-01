@@ -47,6 +47,8 @@ objdir() {
 m all >/dev/null
 check "second build does nothing" "$(compiles all) $(links all)" "0 0"
 
+# Backdated, so that the touched header is newer than the objects even with 1-second timestamps (macOS make 3.81)
+find . -type f -exec touch -t 200001010000 {} +
 touch src/common.h
 check "header change recompiles only its includers" \
     "$(m -n all | grep -E '^echo (CC|CXX) ' | sed 's|.*/||' | sort -u)" "a.o"
