@@ -61,6 +61,8 @@ check "target flags are applied" "$(m -n -W src/b.c prog_fast | grep -c -e '-DFA
 check "editing target flags recompiles that target" "$(compiles prog_fast FAST_FLAGS=-DMORE)" 3
 check "editing target flags leaves other targets alone" "$(compiles prog_a FAST_FLAGS=-DMORE)" 0
 check "CFLAGS change recompiles a C++ program" "$(compiles prog_cxx CFLAGS=-DOTHER)" 3
+check "link flags change relinks without recompiling" \
+    "$(compiles prog_a LDFLAGS=-L.) $(compiles prog_a LDLIBS=-lm) $(links prog_a LDFLAGS=-L.)" "0 0 1"
 
 printf 'int added_symbol(void);\nint added_symbol(void) { return 0; }\n' > src/c.c
 check "new source compiles only itself" "$(compiles prog_a)" 1
