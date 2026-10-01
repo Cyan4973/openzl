@@ -311,6 +311,14 @@ $(LIBLZ4_A) : $(LZ4_HEADER) $(LZ4_SRCS)
 	$(MAKE) -C $(LZ4_LIBDIR) liblz4.a
 	touch $@
 
+# build-scripts/cmake/openzl-deps.cmake must pin the same zstd and lz4 tarballs
+check-dependency-pins: check-cmake-pins
+.PHONY: check-cmake-pins
+check-cmake-pins:
+	@for v in $(ZSTD_VERSION) $(ZSTD_SHA256) $(LZ4_VERSION) $(LZ4_SHA256); do \
+	    grep -q "\"$$v\"" build-scripts/cmake/openzl-deps.cmake || \
+	    { echo "error: build-scripts/cmake/openzl-deps.cmake lacks \"$$v\"" >&2; exit 1; }; done
+
 # Google Test
 GTEST_VERSION ?= 1.17.0
 GTEST_SHA256 ?= 65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c
