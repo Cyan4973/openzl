@@ -175,7 +175,7 @@ ASM_SRCS ?= $(sort $(filter %.S,$(MCM_SRCS)) $(foreach dir,$(ASM_SRCDIRS),$(wild
 C_OBJS   ?= $(patsubst %.c,%.o,$(C_SRCS))
 CPP_OBJS ?= $(patsubst %.cpp,%.o,$(CPP_SRCS))
 CC_OBJS  ?= $(patsubst %.cc,%.o,$(CC_SRCS))
-CXX_OBJS ?= $(CPP_OBJS) $(CC_OBJS) # Note: not used
+CXX_OBJS ?= $(CPP_OBJS) $(CC_OBJS)
 ASM_OBJS ?= $(patsubst %.S,%.o,$(ASM_SRCS))
 
 # Create targets for individual object files
