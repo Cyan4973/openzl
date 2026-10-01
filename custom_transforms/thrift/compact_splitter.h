@@ -229,7 +229,7 @@ CompactParser::parseListHeader(const CompactParser::PT::Iterator& current)
     const TType elemType     = parseType(typeNibble, TypeParse::kForCollection);
     writeType(elemType);
 
-    debug("List header: size {}, type {}", size, elemType);
+    debug("List header: size {}, type {}", size, fmt::underlying(elemType));
     return { .size = size, .elemType = elemType };
 }
 
@@ -251,7 +251,7 @@ DCompactParser::unparseListHeader(const DCompactParser::PT::Iterator& current)
     debug("List header: size {}, type {} ({})",
           size,
           thriftTypeToString(elemType),
-          elemType);
+          fmt::underlying(elemType));
     return { .size = size, .elemType = elemType };
 }
 
@@ -278,9 +278,9 @@ CompactParser::parseMapHeader(const CompactParser::PT::Iterator& current)
     debug("Map header: size {}, keyType {} ({}), valueType {} ({})",
           size,
           thriftTypeToString(keyType),
-          keyType,
+          fmt::underlying(keyType),
           thriftTypeToString(valueType),
-          valueType);
+          fmt::underlying(valueType));
     return { .size = size, .keyType = keyType, .valueType = valueType };
 }
 
@@ -307,8 +307,8 @@ DCompactParser::unparseMapHeader(const DCompactParser::PT::Iterator& current)
 
     debug("Map header: size {}, keyType {}, valueType {}",
           size,
-          keyType,
-          valueType);
+          fmt::underlying(keyType),
+          fmt::underlying(valueType));
     return { .size = size, .keyType = keyType, .valueType = valueType };
 }
 
@@ -370,7 +370,7 @@ CompactParser::parseFieldHeader(
         writeValue(field_it, val);
     }
 
-    debug("Field header: type {}, id {}", type, rawId);
+    debug("Field header: type {}, id {}", fmt::underlying(type), rawId);
     return field_it;
 }
 
@@ -413,7 +413,7 @@ DCompactParser::unparseFieldHeader(
         writeValue<int16_t>(rawId);
     }
 
-    debug("Field header: type {}, id {}", type, rawId);
+    debug("Field header: type {}, id {}", fmt::underlying(type), rawId);
     return field_it;
 }
 
@@ -425,7 +425,7 @@ void CompactParser::advance(const CompactParser::PT::Iterator& current)
           rs_.pos(),
           current.pathStr(),
           thriftTypeToString(type),
-          type,
+          fmt::underlying(type),
           (int32_t)id);
     switch (type) {
         case TType::T_BOOL:
@@ -518,7 +518,7 @@ bool DCompactParser::advanceIfTrivial(
           ws_.nbytes(),
           current.pathStr(),
           thriftTypeToString(type),
-          type,
+          fmt::underlying(type),
           (int32_t)id);
     switch (type) {
         case TType::T_BOOL:
@@ -597,7 +597,7 @@ void DCompactParser::advance(const DCompactParser::PT::Iterator& current)
           ws_.nbytes(),
           current.pathStr(),
           thriftTypeToString(type),
-          type,
+          fmt::underlying(type),
           (int32_t)id);
     switch (type) {
         case TType::T_MAP: {
