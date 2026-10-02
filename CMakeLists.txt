@@ -233,9 +233,9 @@ apply_openzl_compile_options_to_target(openzl_profile_graphs)
 if (OPENZL_BUILD_TESTS)
     set(INSTALL_GTEST OFF)
     FetchContent_Declare(
-        googletest # v1.14.0
-        URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
-        URL_HASH SHA256=1f357c27ca988c3f7c6b4bf68a9395005ac6761f034046e9dde0896e3aba00e4
+        googletest # v1.17.0
+        URL https://github.com/google/googletest/releases/download/v1.17.0/googletest-1.17.0.tar.gz
+        URL_HASH SHA256=65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c
     )
     FetchContent_MakeAvailable(googletest)
     include(GoogleTest)
