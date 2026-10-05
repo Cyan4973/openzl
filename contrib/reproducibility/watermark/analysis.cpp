@@ -44,7 +44,9 @@ static void processDir(const std::filesystem::path& dirPath)
             while (std::getline(ss, field, ',')) {
                 fields.push_back(field);
             }
-            assert(fields.size() == 6);
+            // The trailing path column is not read, and a quoted path that
+            // contains commas splits into more than one field.
+            assert(fields.size() >= 6);
             stats.origSize += std::stoull(fields[0]);
             stats.compressedSize += std::stoull(fields[1]);
             stats.ctimeMs += std::stod(fields[3]);
