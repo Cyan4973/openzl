@@ -16,7 +16,23 @@ cpp_library(
         glob([
             "include/**/*.hpp",
         ])
-    ),
+    )
+    | {
+        header: header
+        for header in [
+            "src/openzl/cpp/experimental/trace/CborHelpers.hpp",
+            "src/openzl/cpp/experimental/trace/ChunkTraceCore.hpp",
+            "src/openzl/cpp/experimental/trace/Codec.hpp",
+            "src/openzl/cpp/experimental/trace/CompressChunkTrace.hpp",
+            "src/openzl/cpp/experimental/trace/CompressTracer.hpp",
+            "src/openzl/cpp/experimental/trace/CompressionTraceHooks.hpp",
+            "src/openzl/cpp/experimental/trace/DecompressChunkTrace.hpp",
+            "src/openzl/cpp/experimental/trace/DecompressTracer.hpp",
+            "src/openzl/cpp/experimental/trace/DecompressionTraceHooks.hpp",
+            "src/openzl/cpp/experimental/trace/Graph.hpp",
+            "src/openzl/cpp/experimental/trace/StreamVisualizer.hpp",
+        ]
+    },
     header_namespace = "",
     private_headers = private_headers(
         glob([

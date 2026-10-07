@@ -19,7 +19,7 @@ cpp_library(
     # @autodeps-skip
     name = "codec_decode_registry",
     srcs = ["codec_decode_registry.cpp"],
-    headers = relative_headers(["codec_decode_registry.hpp"]),
+    headers = relative_headers(["codec_decode_registry.hpp"]) | {"codec_decode_registry.hpp": "codec_decode_registry.hpp"},
     header_namespace = "",
     deps = [
         "../../../..:zstronglib",
@@ -34,7 +34,7 @@ cpp_library(
     # @autodeps-skip
     name = "decode_planner",
     srcs = ["decode_planner.cpp"],
-    headers = relative_headers(["decode_planner.hpp"]),
+    headers = relative_headers(["decode_planner.hpp"]) | {"decode_planner.hpp": "decode_planner.hpp"},
     header_namespace = "",
     deps = [
         "../../../..:zstronglib",

@@ -1,6 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-load("../../../defs.bzl", "zs_cxxbinary", "zs_cxxlibrary")
+load("../../../defs.bzl", "relative_headers", "zs_cxxbinary", "zs_cxxlibrary")
 
 oncall("data_compression")
 
@@ -18,15 +18,41 @@ zs_cxxlibrary(
         ],
         exclude = ["main.cpp"],
     ),
-    headers = glob([
-        "*.h",
-        "tokenizer/*.h",
-        "grouper/*.h",
-        "parser/*.h",
-        "codegen/*.h",
-        "semantic_analyzer/*.h",
-        "optimizer/*.h",
-    ]),
+    headers = relative_headers(
+        glob([
+            "*.h",
+            "tokenizer/*.h",
+            "grouper/*.h",
+            "parser/*.h",
+            "codegen/*.h",
+            "semantic_analyzer/*.h",
+            "optimizer/*.h",
+        ])
+    )
+    | {
+        header: header
+        for header in [
+            "Compiler.h",
+            "Exception.h",
+            "Logger.h",
+            "Source.h",
+            "Syntax.h",
+            "codegen/CodeGenerator.h",
+            "codegen/RegisterAllocator.h",
+            "grouper/Grouper.h",
+            "grouper/Grouping.h",
+            "optimizer/ConstFoldPass.h",
+            "optimizer/DeadVarPass.h",
+            "optimizer/Optimizer.h",
+            "parser/AST.h",
+            "parser/Grammar.h",
+            "parser/Ops.h",
+            "parser/Parser.h",
+            "semantic_analyzer/SemanticAnalyzer.h",
+            "tokenizer/Token.h",
+            "tokenizer/Tokenizer.h",
+        ]
+    },
     exported_deps = [
         "../../../cpp:openzl_cpp",
     ],

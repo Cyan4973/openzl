@@ -92,7 +92,7 @@ cpp_library(
     # @autodeps-skip
     name = "plan_float_deconstruct_output",
     srcs = ["plan_float_deconstruct_output.cpp"],
-    headers = relative_headers(["plan_float_deconstruct_output.hpp"]),
+    headers = relative_headers(["plan_float_deconstruct_output.hpp"]) | {"plan_float_deconstruct_output.hpp": "plan_float_deconstruct_output.hpp"},
     header_namespace = "",
     deps = ["../../../../..:zstronglib"],
     exported_deps = ["../../common:codec_decode_planning"],

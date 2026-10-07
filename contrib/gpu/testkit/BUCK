@@ -22,7 +22,15 @@ cpp_library(
         "frame_factory.h",
         "frame_verifier.h",
         "multichunk_frame.h",
-    ]),
+    ])
+    | {
+        header: header
+        for header in [
+            "frame_factory.h",
+            "frame_verifier.h",
+            "multichunk_frame.h",
+        ]
+    },
     header_namespace = "",
     exported_deps = [
         "../../..:zstronglib",

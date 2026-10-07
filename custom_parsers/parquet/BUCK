@@ -12,7 +12,7 @@ zs_cxxlibrary(
 zs_cxxlibrary(
     name = "thrift_compact_reader",
     srcs = ["thrift_compact_reader.cpp"],
-    headers = ["thrift_compact_reader.h"],
+    headers = {"custom_parsers/parquet/thrift_compact_reader.h": "thrift_compact_reader.h", "thrift_compact_reader.h": "thrift_compact_reader.h"},
     exported_deps = [
         "../..:zstronglib",
         ":thrift_types",
@@ -22,7 +22,7 @@ zs_cxxlibrary(
 zs_cxxlibrary(
     name = "parquet_metadata",
     srcs = ["parquet_metadata.cpp"],
-    headers = ["parquet_metadata.h"],
+    headers = {"custom_parsers/parquet/parquet_metadata.h": "parquet_metadata.h", "parquet_metadata.h": "parquet_metadata.h"},
     exported_deps = [
         ":thrift_compact_reader",
         ":thrift_types",
@@ -32,7 +32,7 @@ zs_cxxlibrary(
 zs_cxxlibrary(
     name = "parquet_lexer",
     srcs = ["parquet_lexer.cpp"],
-    headers = ["parquet_lexer.h"],
+    headers = {"custom_parsers/parquet/parquet_lexer.h": "parquet_lexer.h", "parquet_lexer.h": "parquet_lexer.h"},
     deps = [
         "../..:zstronglib",
         ":parquet_metadata",
@@ -42,7 +42,7 @@ zs_cxxlibrary(
 zs_cxxlibrary(
     name = "parquet_graph",
     srcs = ["parquet_graph.c"],
-    headers = ["parquet_graph.h"],
+    headers = {"custom_parsers/parquet/parquet_graph.h": "parquet_graph.h", "parquet_graph.h": "parquet_graph.h"},
     deps = [
         "../..:zstronglib",
         ":parquet_lexer",

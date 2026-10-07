@@ -11,9 +11,10 @@ zs_cxxbinary(
         "core_model.c",
         "zs2_core_mlselector.c",
     ],
-    headers = [
-        "core_model.h",
-    ],
+    headers = {
+        "core_model.h": "core_model.h",
+        "examples/ml_selector/core_model.h": "core_model.h",
+    },
     deps = [
         "../..:zstronglib",
         "../../tools:fileio",

@@ -2,8 +2,8 @@
 
 #include <math.h>
 
-#include <folly/dynamic.h>
-#include <folly/json.h>
+#include <folly/json/dynamic.h>
+#include <folly/json/json.h>
 
 #include "openzl/common/assertion.h"
 #include "tools/gbt_predictor/zstrong_gbt_predictor.h"

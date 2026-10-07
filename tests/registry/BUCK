@@ -17,7 +17,10 @@ zs_cxxlibrary(
     # @autodeps-skip
     name = "openzl_input",
     srcs = ["OpenZLInput.cpp"],
-    headers = ["OpenZLInput.h"],
+    headers = {
+        "OpenZLInput.h": "OpenZLInput.h",
+        "tests/registry/OpenZLInput.h": "OpenZLInput.h",
+    },
     exported_deps = [
         "../../cpp:openzl_cpp",
     ],
@@ -32,7 +35,10 @@ zs_cxxlibrary(
     + glob([
         "components/*.cpp",
     ]),
-    headers = ["OpenZLComponents.h"],
+    headers = {
+        "OpenZLComponents.h": "OpenZLComponents.h",
+        "tests/registry/OpenZLComponents.h": "OpenZLComponents.h",
+    },
     deps = [
         "../datagen:datagen",
         "fbsource//third-party/zstd:zstd",

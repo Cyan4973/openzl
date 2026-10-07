@@ -10,10 +10,12 @@ zs_cxxlibrary(
         "introspection_hooks.cpp",
         "training_sample_collector.cpp",
     ],
-    headers = [
-        "introspection_hooks.h",
-        "training_sample_collector.h",
-    ],
+    headers = {
+        "introspection_hooks.h": "introspection_hooks.h",
+        "tools/training/sample_collection/introspection_hooks.h": "introspection_hooks.h",
+        "tools/training/sample_collection/training_sample_collector.h": "training_sample_collector.h",
+        "training_sample_collector.h": "training_sample_collector.h",
+    },
     exported_deps = [
         "../..:io",
         "../..:logger",

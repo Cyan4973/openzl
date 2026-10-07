@@ -9,9 +9,7 @@ zs_cxxlibrary(
     srcs = [
         "test_utils.cpp",
     ],
-    headers = [
-        "test_utils.h",
-    ],
+    headers = {"custom_parsers/parquet/tests/test_utils.h": "test_utils.h", "test_utils.h": "test_utils.h"},
     compiler_flags = [
         "-Wno-switch-enum",
         "-Wno-shadow",

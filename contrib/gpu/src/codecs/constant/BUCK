@@ -11,7 +11,7 @@ cpp_library(
     # @autodeps-skip
     name = "plan_constant_output",
     srcs = ["plan_constant_output.cpp"],
-    headers = relative_headers(["plan_constant_output.hpp"]),
+    headers = relative_headers(["plan_constant_output.hpp"]) | {"plan_constant_output.hpp": "plan_constant_output.hpp"},
     header_namespace = "",
     deps = ["../../../../..:zstronglib"],
     exported_deps = ["../../common:codec_decode_planning"],

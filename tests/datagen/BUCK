@@ -16,13 +16,24 @@ zs_cxxlibrary(
             "test_registry/**/*.cpp",
         ],
     ),
-    headers = glob(
-        ["**/*.h"],
-        exclude = [
-            "test/**/*.h",
-            "test_registry/**/*.h",
-        ],
-    ),
+    headers = relative_headers(
+        glob(
+            ["**/*.h"],
+            exclude = [
+                "test/**/*.h",
+                "test_registry/**/*.h",
+            ],
+        )
+    )
+    | {
+        header: header
+        for header in [
+            "InputExpander.h",
+            "structures/CompressorProducer.h",
+            "structures/LocalParamsProducer.h",
+            "structures/openzl/StringInputProducer.h",
+        ]
+    },
     exported_deps = [
         "..:utils",
         "../..:common",
@@ -49,7 +60,7 @@ zs_unittest(
 cpp_library(
     name = "custom_nodes",
     srcs = glob(["test_registry/*.cpp"]),
-    headers = relative_headers(glob(["test_registry/*.h"])),
+    headers = relative_headers(glob(["test_registry/*.h"])) | {"test_registry/CustomNodes.h": "test_registry/CustomNodes.h"},
     header_namespace = "",
     # NOTE: Must only be used by version_test_interface.so because it depends on Zstrong
     # Must NOT be used by version_test_interface or version_test targets.

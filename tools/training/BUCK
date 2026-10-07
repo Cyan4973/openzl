@@ -9,9 +9,7 @@ zs_cxxlibrary(
     srcs = [
         "train.cpp",
     ],
-    headers = [
-        "train.h",
-    ],
+    headers = {"tools/training/train.h": "train.h", "train.h": "train.h"},
     preprocessor_flags = [
         "-DOPENZL_HAS_ML_SELECTOR_TRAINER=1",
     ],
@@ -37,11 +35,12 @@ zs_cxxlibrary(
     srcs = [
         "trained_candidate.cpp",
     ],
-    headers = [
-        "train_exceptions.h",
-        "train_params.h",
-        "trained_candidate.h",
-    ],
+    headers = {
+        "tools/training/train_exceptions.h": "train_exceptions.h",
+        "tools/training/train_params.h": "train_params.h",
+        "tools/training/trained_candidate.h": "trained_candidate.h",
+        "trained_candidate.h": "trained_candidate.h",
+    },
     deps = [
         "../../cpp:openzl_cpp",
     ],

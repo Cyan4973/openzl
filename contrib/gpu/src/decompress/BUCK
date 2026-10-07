@@ -19,7 +19,8 @@ cpp_library(
     headers = relative_headers([
         "gpu_decompress.h",
         "gpu_decompress.hpp",
-    ]),
+    ])
+    | {"gpu_decompress.h": "gpu_decompress.h", "gpu_decompress.hpp": "gpu_decompress.hpp"},
     header_namespace = "",
     deps = [
         "../planning:decode_planner",

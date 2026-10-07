@@ -9,9 +9,10 @@ zs_cxxlibrary(
     srcs = [
         "graph_mutation_utils.cpp",
     ],
-    headers = [
-        "graph_mutation_utils.h",
-    ],
+    headers = {
+        "graph_mutation_utils.h": "graph_mutation_utils.h",
+        "tools/training/graph_mutation/graph_mutation_utils.h": "graph_mutation_utils.h",
+    },
     exported_deps = [
         "../..:logger",
         "../../../cpp:openzl_cpp",

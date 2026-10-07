@@ -7,7 +7,7 @@ oncall("data_compression")
 zs_cxxlibrary(
     name = "numeric_graphs",
     srcs = ["numeric_graphs.cpp"],
-    headers = ["numeric_graphs.h"],
+    headers = {"custom_parsers/shared_components/numeric_graphs.h": "numeric_graphs.h", "numeric_graphs.h": "numeric_graphs.h"},
     exported_deps = [
         "../..:zstronglib",
     ],
@@ -16,7 +16,7 @@ zs_cxxlibrary(
 zs_cxxlibrary(
     name = "string_graphs",
     srcs = ["string_graphs.cpp"],
-    headers = ["string_graphs.h"],
+    headers = {"custom_parsers/shared_components/string_graphs.h": "string_graphs.h", "string_graphs.h": "string_graphs.h"},
     exported_deps = [
         "../..:zstronglib",
     ],
@@ -27,9 +27,10 @@ zs_cxxlibrary(
     srcs = [
         "clustering.cpp",
     ],
-    headers = [
-        "clustering.h",
-    ],
+    headers = {
+        "clustering.h": "clustering.h",
+        "custom_parsers/shared_components/clustering.h": "clustering.h",
+    },
     exported_deps = [
         "../..:zstronglib",
         ":numeric_graphs",

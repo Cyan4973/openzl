@@ -16,7 +16,19 @@ cpp_library(
     ]),
     headers = relative_headers(
         glob(["*.h"]),
-    ),
+    )
+    | {
+        header: header
+        for header in [
+            "directed_selector.h",
+            "empty_input_selector.h",
+            "parse_config.h",
+            "probabilistic_selector.h",
+            "split_helpers.h",
+            "thrift_parsers.h",
+            "thrift_types.h",
+        ]
+    },
     header_namespace = "",
     compiler_flags = [
         "-DUSE_FOLLY",

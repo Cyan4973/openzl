@@ -16,7 +16,8 @@ cpp_library(
     headers = relative_headers([
         "decode_parse.h",
         "encode_parse.h",
-    ]),
+    ])
+    | {"encode_parse.h": "encode_parse.h"},
     header_namespace = "",
     deps = [
         "//folly:conv",

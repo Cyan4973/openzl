@@ -13,7 +13,7 @@ oncall("data_compression")
 cpp_binary(
     name = "version_test_interface.so",
     srcs = ["VersionTestInterfaceABI.cpp"],
-    headers = relative_headers(["VersionTestInterfaceABI.h"]),
+    headers = relative_headers(["VersionTestInterfaceABI.h"]) | {"VersionTestInterfaceABI.h": "VersionTestInterfaceABI.h"},
     header_namespace = "",
     dlopen_enabled = True,
     visibility = [
@@ -37,7 +37,8 @@ cpp_library(
     headers = relative_headers([
         "VersionTestInterface.h",
         "VersionTestInterfaceABI.h",
-    ]),
+    ])
+    | {"VersionTestInterface.h": "VersionTestInterface.h"},
     header_namespace = "",
     external_deps = [
         "gflags",

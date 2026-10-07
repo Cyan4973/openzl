@@ -1,6 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-load("../../../defs.bzl", "zs_cxxbinary", "zs_cxxlibrary")
+load("../../../defs.bzl", "relative_headers", "zs_cxxbinary", "zs_cxxlibrary")
 
 oncall("data_compression")
 
@@ -12,9 +12,29 @@ zs_cxxlibrary(
         ],
         exclude = ["main.cpp"],
     ),
-    headers = glob([
-        "*.h",
-    ]),
+    headers = relative_headers(
+        glob([
+            "*.h",
+        ])
+    )
+    | {
+        header: header
+        for header in [
+            "AST.h",
+            "Compiler.h",
+            "Exception.h",
+            "Grammar.h",
+            "Grouper.h",
+            "Grouping.h",
+            "Logger.h",
+            "Parser.h",
+            "Serializer.h",
+            "Source.h",
+            "Syntax.h",
+            "Token.h",
+            "Tokenizer.h",
+        ]
+    },
     exported_deps = [
         "../../../cpp:openzl_cpp",
     ],

@@ -12,11 +12,14 @@ zs_cxxlibrary(
         "thread_pool.cpp",
         "utils.cpp",
     ],
-    headers = [
-        "serialized_compressor_internal.h",
-        "thread_pool.h",
-        "utils.h",
-    ],
+    headers = {
+        "serialized_compressor_internal.h": "serialized_compressor_internal.h",
+        "thread_pool.h": "thread_pool.h",
+        "tools/training/utils/serialized_compressor_internal.h": "serialized_compressor_internal.h",
+        "tools/training/utils/thread_pool.h": "thread_pool.h",
+        "tools/training/utils/utils.h": "utils.h",
+        "utils.h": "utils.h",
+    },
     exported_deps = [
         "../..:io",
         "../..:logger",
@@ -31,9 +34,10 @@ zs_cxxlibrary(
     srcs = [
         "genetic_algorithm.cpp",
     ],
-    headers = [
-        "genetic_algorithm.h",
-    ],
+    headers = {
+        "genetic_algorithm.h": "genetic_algorithm.h",
+        "tools/training/utils/genetic_algorithm.h": "genetic_algorithm.h",
+    },
     exported_deps = [
         "../../../cpp:openzl_cpp",
     ],
@@ -43,7 +47,7 @@ cpp_library(
     # @autodeps-skip
     name = "crowding_distance_selector",
     srcs = ["crowding_distance_selector.cpp"],
-    headers = relative_headers(["crowding_distance_selector.h"]),
+    headers = relative_headers(["crowding_distance_selector.h"]) | {"crowding_distance_selector.h": "crowding_distance_selector.h"},
     header_namespace = "",
     exported_deps = [
         "../../../cpp:openzl_cpp",
@@ -54,7 +58,7 @@ cpp_library(
     # @autodeps-skip
     name = "benchmark",
     srcs = ["benchmark.cpp"],
-    headers = relative_headers(["benchmark.h"]),
+    headers = relative_headers(["benchmark.h"]) | {"benchmark.h": "benchmark.h"},
     header_namespace = "",
     labels = ["autodeps2_generated"],
     exported_deps = [
@@ -67,7 +71,7 @@ cpp_library(
     # @autodeps-skip
     name = "mutation",
     srcs = ["mutation.cpp"],
-    headers = relative_headers(["mutation.h"]),
+    headers = relative_headers(["mutation.h"]) | {"mutation.h": "mutation.h"},
     header_namespace = "",
     labels = ["autodeps2_generated"],
     exported_deps = [
@@ -82,7 +86,7 @@ cpp_library(
     # @autodeps-skip
     name = "pareto_combination",
     srcs = ["pareto_combination.cpp"],
-    headers = relative_headers(["pareto_combination.h"]),
+    headers = relative_headers(["pareto_combination.h"]) | {"pareto_combination.h": "pareto_combination.h"},
     header_namespace = "",
     exported_deps = [
         "..:train_common",

@@ -7,12 +7,14 @@ oncall("data_compression")
 zs_cxxlibrary(
     name = "zstrong_gbt_predictor",
     srcs = ["zstrong_gbt_predictor.cpp"],
-    headers = ["zstrong_gbt_predictor.h"],
+    headers = {"tools/gbt_predictor/zstrong_gbt_predictor.h": "zstrong_gbt_predictor.h", "zstrong_gbt_predictor.h": "zstrong_gbt_predictor.h"},
     compiler_flags = ["-Wno-float-equal"],
     strict_conversions = False,
     deps = [
         "../..:zstronglib",
-        "//folly:dynamic",
     ],
-    exported_deps = ["//folly:dynamic"],
+    exported_deps = [
+        "//folly:dynamic",
+        "//folly/json:dynamic",
+    ],
 )

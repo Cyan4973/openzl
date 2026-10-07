@@ -1,13 +1,13 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-load("../../defs.bzl", "zs_binary", "zs_library", "zs_release_binary")
+load("../../defs.bzl", "relative_headers", "zs_binary", "zs_library", "zs_release_binary")
 
 oncall("data_compression")
 
 zs_library(
     name = "sao_graph",
     srcs = ["scenarios/sao_graph.c"],
-    headers = ["scenarios/sao_graph.h"],
+    headers = {"benchmark/unitBench/scenarios/sao_graph.h": "scenarios/sao_graph.h", "scenarios/sao_graph.h": "scenarios/sao_graph.h"},
     deps = [
         "../..:zstronglib",
         "fbsource//third-party/benchmark:benchmark",
@@ -17,9 +17,35 @@ zs_library(
 zs_binary(
     name = "unitBench",
     srcs = glob(["**/*.c"]),
-    headers = glob([
-        "**/*.h",
-    ]),
+    headers = relative_headers(
+        glob([
+            "**/*.h",
+        ])
+    )
+    | {
+        header: header
+        for header in [
+            "benchfn.h",
+            "scenarios/codecs/bitSplit.h",
+            "scenarios/codecs/delta.h",
+            "scenarios/codecs/dispatch_by_tag.h",
+            "scenarios/codecs/dispatch_string.h",
+            "scenarios/codecs/entropy.h",
+            "scenarios/codecs/flatpack.h",
+            "scenarios/codecs/huffman.h",
+            "scenarios/codecs/rolz.h",
+            "scenarios/codecs/sparse_num.h",
+            "scenarios/codecs/tokenize.h",
+            "scenarios/codecs/transpose.h",
+            "scenarios/misc/id_list_features.h",
+            "scenarios/misc/sao.h",
+            "scenarios/sao_graph.h",
+            "scenarios/sao_sddl1.h",
+            "scenarios/sao_sddl2.h",
+            "scenarios/split_byrange_graph.h",
+            "scenarios/zstd.h",
+        ]
+    },
     deps = [
         "../..:zstronglib",
         "../../tools:fileio",
@@ -33,9 +59,35 @@ zs_binary(
 zs_release_binary(
     name = "unitBench_mc",
     srcs = glob(["**/*.c"]),
-    headers = glob([
-        "**/*.h",
-    ]),
+    headers = relative_headers(
+        glob([
+            "**/*.h",
+        ])
+    )
+    | {
+        header: header
+        for header in [
+            "benchfn.h",
+            "scenarios/codecs/bitSplit.h",
+            "scenarios/codecs/delta.h",
+            "scenarios/codecs/dispatch_by_tag.h",
+            "scenarios/codecs/dispatch_string.h",
+            "scenarios/codecs/entropy.h",
+            "scenarios/codecs/flatpack.h",
+            "scenarios/codecs/huffman.h",
+            "scenarios/codecs/rolz.h",
+            "scenarios/codecs/sparse_num.h",
+            "scenarios/codecs/tokenize.h",
+            "scenarios/codecs/transpose.h",
+            "scenarios/misc/id_list_features.h",
+            "scenarios/misc/sao.h",
+            "scenarios/sao_graph.h",
+            "scenarios/sao_sddl1.h",
+            "scenarios/sao_sddl2.h",
+            "scenarios/split_byrange_graph.h",
+            "scenarios/zstd.h",
+        ]
+    },
     deps = [
         "../..:zstronglib",
         "../../tools:fileio",

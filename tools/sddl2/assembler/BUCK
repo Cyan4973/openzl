@@ -5,13 +5,19 @@ oncall("data_compression")
 zs_cxxlibrary(
     name = "opcodes_generated",
     srcs = ["OpcodesGenerated.cpp"],
-    headers = ["OpcodesGenerated.h"],
+    headers = {
+        "OpcodesGenerated.h": "OpcodesGenerated.h",
+        "tools/sddl2/assembler/OpcodesGenerated.h": "OpcodesGenerated.h",
+    },
 )
 
 zs_cxxlibrary(
     name = "lib",
     srcs = ["Assembler.cpp"],
-    headers = ["Assembler.h"],
+    headers = {
+        "Assembler.h": "Assembler.h",
+        "tools/sddl2/assembler/Assembler.h": "Assembler.h",
+    },
     deps = [":opcodes_generated"],
     exported_deps = [
         "../../../cpp:openzl_cpp",

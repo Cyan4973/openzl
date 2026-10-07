@@ -10,9 +10,10 @@ zs_library(
     srcs = [
         "src/openzl_wasm.cpp",
     ],
-    headers = [
-        "src/openzl_wasm.h",
-    ],
+    headers = {
+        "src/openzl_wasm.h": "src/openzl_wasm.h",
+        "tools/wasm/src/openzl_wasm.h": "src/openzl_wasm.h",
+    },
     deps = [
         "../../cli/utils:profile_graphs",
         "../../custom_parsers:custom_parsers",

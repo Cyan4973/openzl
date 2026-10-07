@@ -16,7 +16,8 @@ cpp_library(
     headers = relative_headers([
         "decode_tulip_v2.h",
         "encode_tulip_v2.h",
-    ]),
+    ])
+    | {"decode_tulip_v2.h": "decode_tulip_v2.h", "encode_tulip_v2.h": "encode_tulip_v2.h"},
     header_namespace = "",
     exported_deps = [
         "../..:zstronglib",

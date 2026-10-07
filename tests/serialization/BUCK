@@ -9,7 +9,10 @@ oncall("data_compression")
 zs_cxxlibrary(
     name = "graph_builder_utils",
     srcs = ["GraphBuilderUtils.cpp"],
-    headers = ["GraphBuilderUtils.h"],
+    headers = {
+        "GraphBuilderUtils.h": "GraphBuilderUtils.h",
+        "tests/serialization/GraphBuilderUtils.h": "GraphBuilderUtils.h",
+    },
     exported_deps = [
         "../../cpp:openzl_cpp",
         "../datagen:datagen",
@@ -20,7 +23,10 @@ zs_cxxlibrary(
 zs_cxxlibrary(
     name = "graph_builder",
     srcs = ["GraphBuilder.cpp"],
-    headers = ["GraphBuilder.h"],
+    headers = {
+        "GraphBuilder.h": "GraphBuilder.h",
+        "tests/serialization/GraphBuilder.h": "GraphBuilder.h",
+    },
     exported_deps = [
         "../../cpp:openzl_cpp",
         "../datagen:datagen",

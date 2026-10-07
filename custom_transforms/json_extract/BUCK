@@ -15,7 +15,8 @@ cpp_library(
     headers = relative_headers([
         "decode_json_extract.h",
         "encode_json_extract.h",
-    ]),
+    ])
+    | {"decode_json_extract.h": "decode_json_extract.h", "encode_json_extract.h": "encode_json_extract.h"},
     header_namespace = "",
     private_headers = relative_headers(["common_json_extract.h"]),
     exported_deps = [

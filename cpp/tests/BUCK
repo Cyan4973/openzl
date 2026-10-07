@@ -18,6 +18,7 @@ cpp_unittest(
     ),
     header_namespace = "",
     labels = cross_platform_labels(),
+    source_headers = ["TestCustomCodec.hpp"],
     deps = [
         "..:openzl_cpp",
         "../../tests/datagen:datagen",

@@ -15,7 +15,15 @@ cpp_library(
         "lz_compressor.h",
         "lz_genetic_algorithm.h",
         "lz_trainer.h",
-    ]),
+    ])
+    | {
+        header: header
+        for header in [
+            "lz_compressor.h",
+            "lz_genetic_algorithm.h",
+            "lz_trainer.h",
+        ]
+    },
     header_namespace = "",
     deps = [
         "../../..:zstronglib",

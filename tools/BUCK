@@ -8,7 +8,7 @@ oncall("data_compression")
 zs_cxxlibrary(
     name = "arg",
     srcs = glob(["arg/**/*.cpp"]),
-    headers = glob(["arg/**/*.h"]),
+    headers = relative_headers(glob(["arg/**/*.h"])) | {"arg/arg_parser.h": "arg/arg_parser.h", "arg/parsed_args.h": "arg/parsed_args.h"},
 )
 
 zs_library(
@@ -16,9 +16,10 @@ zs_library(
     srcs = [
         "fileio/fileio.c",
     ],
-    headers = [
-        "fileio/fileio.h",
-    ],
+    headers = {
+        "fileio/fileio.h": "fileio/fileio.h",
+        "tools/fileio/fileio.h": "fileio/fileio.h",
+    },
     exported_deps = [
         "..:common",
     ],
@@ -27,7 +28,7 @@ zs_library(
 zs_cxxlibrary(
     name = "zstrong_cpp",
     srcs = ["zstrong_cpp.cpp"],
-    headers = ["zstrong_cpp.h"],
+    headers = {"tools/zstrong_cpp.h": "zstrong_cpp.h", "zstrong_cpp.h": "zstrong_cpp.h"},
     exported_deps = [
         "..:zstronglib",
         "../cpp:openzl_cpp",
@@ -40,7 +41,7 @@ zs_cxxlibrary(
 zs_cxxlibrary(
     name = "zstrong_ml",
     srcs = ["zstrong_ml.cpp"],
-    headers = ["zstrong_ml.h"],
+    headers = {"tools/zstrong_ml.h": "zstrong_ml.h", "zstrong_ml.h": "zstrong_ml.h"},
     compiler_flags = ["-Wno-float-equal"],
     strict_conversions = False,
     deps = [],
@@ -56,7 +57,7 @@ zs_cxxlibrary(
 zs_cxxlibrary(
     name = "zstrong_json",
     srcs = ["zstrong_json.cpp"],
-    headers = ["zstrong_json.h"],
+    headers = {"tools/zstrong_json.h": "zstrong_json.h", "zstrong_json.h": "zstrong_json.h"},
     compiler_flags = ["-Wno-float-equal"],
     strict_conversions = False,
     deps = [],
@@ -97,9 +98,10 @@ zs_library(
     srcs = [
         "time/timefn.c",
     ],
-    headers = [
-        "time/timefn.h",
-    ],
+    headers = {
+        "time/timefn.h": "time/timefn.h",
+        "tools/time/timefn.h": "time/timefn.h",
+    },
     exported_deps = [
         "..:common",
     ],
@@ -120,16 +122,32 @@ zs_cxxlibrary(
     srcs = [
         "logger/Logger.cpp",
     ],
-    headers = [
-        "logger/Logger.h",
-    ],
+    headers = {
+        "logger/Logger.h": "logger/Logger.h",
+        "tools/logger/Logger.h": "logger/Logger.h",
+    },
     deps = [],
 )
 
 zs_cxxlibrary(
     name = "io",
     srcs = glob(["io/**/*.cpp"]),
-    headers = glob(["io/**/*.h"]),
+    headers = relative_headers(glob(["io/**/*.h"]))
+    | {
+        header: header
+        for header in [
+            "io/InputFile.h",
+            "io/InputSet.h",
+            "io/InputSetBuilder.h",
+            "io/InputSetDir.h",
+            "io/InputSetFileOrDir.h",
+            "io/InputSetLogger.h",
+            "io/InputSetMulti.h",
+            "io/InputSetStatic.h",
+            "io/OutputFile.h",
+            "io/OutputNull.h",
+        ]
+    },
     exported_deps = [
         "../cpp:openzl_cpp",
         ":logger",

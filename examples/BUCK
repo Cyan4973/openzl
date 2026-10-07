@@ -43,7 +43,10 @@ zs_binary(
 zs_library(
     name = "example_utils",
     srcs = ["example_utils.cpp"],
-    headers = ["example_utils.h"],
+    headers = {
+        "example_utils.h": "example_utils.h",
+        "examples/example_utils.h": "example_utils.h",
+    },
     deps = [
         "..:zstronglib",
         "../tools:fileio",

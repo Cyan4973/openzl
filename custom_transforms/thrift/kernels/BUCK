@@ -10,7 +10,7 @@ oncall("data_compression")
 zs_library(
     name = "encode_thrift_kernel",
     srcs = ["encode_thrift_kernel.c"],
-    headers = ["encode_thrift_kernel.h"],
+    headers = {"custom_transforms/thrift/kernels/encode_thrift_kernel.h": "encode_thrift_kernel.h", "encode_thrift_kernel.h": "encode_thrift_kernel.h"},
     exported_deps = [
         "../../..:common",
     ],
@@ -19,7 +19,7 @@ zs_library(
 zs_library(
     name = "decode_thrift_kernel",
     srcs = ["decode_thrift_kernel.c"],
-    headers = ["decode_thrift_kernel.h"],
+    headers = {"custom_transforms/thrift/kernels/decode_thrift_kernel.h": "decode_thrift_kernel.h", "decode_thrift_kernel.h": "decode_thrift_kernel.h"},
     exported_deps = [
         "../../..:common",
     ],
@@ -37,7 +37,7 @@ cpp_library(
 cpp_library(
     name = "encode_thrift_binding",
     srcs = ["encode_thrift_binding.cpp"],
-    headers = relative_headers(["encode_thrift_binding.h"]),
+    headers = relative_headers(["encode_thrift_binding.h"]) | {"encode_thrift_binding.h": "encode_thrift_binding.h"},
     header_namespace = "",
     exported_deps = [
         "../../..:compress",
@@ -50,7 +50,7 @@ cpp_library(
 cpp_library(
     name = "decode_thrift_binding",
     srcs = ["decode_thrift_binding.cpp"],
-    headers = relative_headers(["decode_thrift_binding.h"]),
+    headers = relative_headers(["decode_thrift_binding.h"]) | {"decode_thrift_binding.h": "decode_thrift_binding.h"},
     header_namespace = "",
     exported_deps = [
         "../../..:decompress",

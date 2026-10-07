@@ -3,7 +3,7 @@
 load("@fbcode_macros//build_defs:cpp_binary.bzl", "cpp_binary")
 load("@fbcode_macros//build_defs:native_rules.bzl", "buck_filegroup")
 load("@fbsource//tools/build_defs:manifold.bzl", "manifold_get")
-load("../defs.bzl", "zs_cxxbinary")
+load("../defs.bzl", "relative_headers", "zs_cxxbinary")
 
 oncall("data_compression")
 
@@ -40,9 +40,23 @@ zs_cxxbinary(
             ],
         )
     ],
-    headers = glob([
-        "**/*.h",
-    ]),
+    headers = relative_headers(
+        glob([
+            "**/*.h",
+        ])
+    )
+    | {
+        header: header
+        for header in [
+            "benchmark_config.h",
+            "e2e/e2e_bench.h",
+            "e2e/e2e_compressor.h",
+            "e2e/e2e_json_extract.h",
+            "e2e/e2e_parse.h",
+            "e2e/e2e_thrift.h",
+            "micro/micro_bench.h",
+        ]
+    },
     resources = {
         "corpus": ":benchmark_corpora",
     },

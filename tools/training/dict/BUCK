@@ -10,10 +10,12 @@ zs_cxxlibrary(
         "base_dict_trainer.cpp",
         "zstd_dict_trainer.cpp",
     ],
-    headers = [
-        "base_dict_trainer.h",
-        "zstd_dict_trainer.h",
-    ],
+    headers = {
+        "base_dict_trainer.h": "base_dict_trainer.h",
+        "tools/training/dict/base_dict_trainer.h": "base_dict_trainer.h",
+        "tools/training/dict/zstd_dict_trainer.h": "zstd_dict_trainer.h",
+        "zstd_dict_trainer.h": "zstd_dict_trainer.h",
+    },
     deps = [
         "../..:logger",
         "../../../cpp:openzl_cpp",

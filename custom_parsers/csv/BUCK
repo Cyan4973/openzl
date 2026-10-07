@@ -1,6 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-load("../../defs.bzl", "zs_library")
+load("../../defs.bzl", "relative_headers", "zs_library")
 
 oncall("data_compression")
 
@@ -13,9 +13,20 @@ zs_library(
         ],
         exclude = ["tests/*"],
     ),
-    headers = glob(
-        ["*.h"],
-    ),
+    headers = relative_headers(
+        glob(
+            ["*.h"],
+        )
+    )
+    | {
+        header: header
+        for header in [
+            "csv_lexer.h",
+            "csv_parser.h",
+            "csv_profile.h",
+            "csv_segmenter.h",
+        ]
+    },
     exported_deps = [
         "../..:zstronglib",
         "../shared_components:numeric_graphs",

@@ -20,13 +20,16 @@ zs_cxxlibrary(
         "DynamicMessageHelper.cpp",
         "StringWriter.cpp",
     ],
-    headers = [
-        "DescriptorLoader.h",
-        "DynamicMessageHelper.h",
-        "StringReader.h",
-        "StringWriter.h",
-        "mem.h",
-    ],
+    headers = {
+        "DescriptorLoader.h": "DescriptorLoader.h",
+        "DynamicMessageHelper.h": "DynamicMessageHelper.h",
+        "StringWriter.h": "StringWriter.h",
+        "tools/protobuf/DescriptorLoader.h": "DescriptorLoader.h",
+        "tools/protobuf/DynamicMessageHelper.h": "DynamicMessageHelper.h",
+        "tools/protobuf/StringReader.h": "StringReader.h",
+        "tools/protobuf/StringWriter.h": "StringWriter.h",
+        "tools/protobuf/mem.h": "mem.h",
+    },
     exported_deps = [
         "../..:zstronglib",
         "fbsource//third-party/protobuf:libprotobuf",
@@ -58,11 +61,13 @@ zs_cxxlibrary(
         "ProtoDeserializer.cpp",
         "ProtoSerializer.cpp",
     ],
-    headers = [
-        "ProtoDeserializer.h",
-        "ProtoSerializer.h",
-        "Types.h",
-    ],
+    headers = {
+        "ProtoDeserializer.h": "ProtoDeserializer.h",
+        "ProtoSerializer.h": "ProtoSerializer.h",
+        "tools/protobuf/ProtoDeserializer.h": "ProtoDeserializer.h",
+        "tools/protobuf/ProtoSerializer.h": "ProtoSerializer.h",
+        "tools/protobuf/Types.h": "Types.h",
+    },
     compiler_flags = [
         "-Wno-switch-enum",
         "-Wno-cast-qual",
@@ -84,9 +89,10 @@ zs_cxxlibrary(
     srcs = [
         "serialization_utils.cpp",
     ],
-    headers = [
-        "serialization_utils.h",
-    ],
+    headers = {
+        "serialization_utils.h": "serialization_utils.h",
+        "tools/protobuf/serialization_utils.h": "serialization_utils.h",
+    },
     exported_deps = [
         ":serializer",
     ],
@@ -97,9 +103,10 @@ zs_cxxlibrary(
     srcs = [
         "ProtoGraph.cpp",
     ],
-    headers = [
-        "ProtoGraph.h",
-    ],
+    headers = {
+        "ProtoGraph.h": "ProtoGraph.h",
+        "tools/protobuf/ProtoGraph.h": "ProtoGraph.h",
+    },
     compiler_flags = [
         "-Wno-switch-enum",
         "-Wno-cast-qual",

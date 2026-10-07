@@ -10,10 +10,12 @@ zs_cxxlibrary(
         "clustering_graph_trainer.cpp",
         "sample_limiter.cpp",
     ],
-    headers = [
-        "clustering_graph_trainer.h",
-        "sample_limiter.h",
-    ],
+    headers = {
+        "clustering_graph_trainer.h": "clustering_graph_trainer.h",
+        "sample_limiter.h": "sample_limiter.h",
+        "tools/training/clustering/clustering_graph_trainer.h": "clustering_graph_trainer.h",
+        "tools/training/clustering/sample_limiter.h": "sample_limiter.h",
+    },
     exported_deps = [
         "..:train_common",
         "../..:logger",
@@ -31,9 +33,7 @@ zs_cxxlibrary(
     srcs = [
         "train_api.cpp",
     ],
-    headers = [
-        "train_api.h",
-    ],
+    headers = {"tools/training/clustering/train_api.h": "train_api.h", "train_api.h": "train_api.h"},
     exported_deps = [
         "..:train_common",
         "../..:logger",
@@ -52,10 +52,11 @@ zs_cxxlibrary(
     srcs = [
         "trainers/full_split_trainer.cpp",
     ],
-    headers = [
-        "trainers/full_split_trainer.h",
-        "trainers/trainer.h",
-    ],
+    headers = {
+        "tools/training/clustering/trainers/full_split_trainer.h": "trainers/full_split_trainer.h",
+        "tools/training/clustering/trainers/trainer.h": "trainers/trainer.h",
+        "trainers/full_split_trainer.h": "trainers/full_split_trainer.h",
+    },
     exported_deps = [
         "../../..:zstronglib",
         "../../../cpp:openzl_cpp",
@@ -69,10 +70,11 @@ zs_cxxlibrary(
     srcs = [
         "trainers/bottom_up_trainer.cpp",
     ],
-    headers = [
-        "trainers/bottom_up_trainer.h",
-        "trainers/trainer.h",
-    ],
+    headers = {
+        "tools/training/clustering/trainers/bottom_up_trainer.h": "trainers/bottom_up_trainer.h",
+        "tools/training/clustering/trainers/trainer.h": "trainers/trainer.h",
+        "trainers/bottom_up_trainer.h": "trainers/bottom_up_trainer.h",
+    },
     exported_deps = [
         "../../..:zstronglib",
         "../../../cpp:openzl_cpp",
@@ -86,10 +88,11 @@ zs_cxxlibrary(
     srcs = [
         "trainers/greedy_trainer.cpp",
     ],
-    headers = [
-        "trainers/greedy_trainer.h",
-        "trainers/trainer.h",
-    ],
+    headers = {
+        "tools/training/clustering/trainers/greedy_trainer.h": "trainers/greedy_trainer.h",
+        "tools/training/clustering/trainers/trainer.h": "trainers/trainer.h",
+        "trainers/greedy_trainer.h": "trainers/greedy_trainer.h",
+    },
     exported_deps = [
         "../../..:zstronglib",
         "../../../cpp:openzl_cpp",
@@ -104,12 +107,14 @@ zs_cxxlibrary(
         "clustering_config_builder.cpp",
         "compression_utils.cpp",
     ],
-    headers = [
-        "clustering_config.h",
-        "clustering_config_builder.h",
-        "compression_utils.h",
-        "utils.h",
-    ],
+    headers = {
+        "clustering_config_builder.h": "clustering_config_builder.h",
+        "compression_utils.h": "compression_utils.h",
+        "tools/training/clustering/clustering_config.h": "clustering_config.h",
+        "tools/training/clustering/clustering_config_builder.h": "clustering_config_builder.h",
+        "tools/training/clustering/compression_utils.h": "compression_utils.h",
+        "tools/training/clustering/utils.h": "utils.h",
+    },
     exported_deps = [
         "../..:logger",
         "../../..:zstronglib",

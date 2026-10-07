@@ -1,6 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-load("../defs.bzl", "cross_platform_labels", "zs_cxxbinary", "zs_cxxlibrary", "zs_fuzzers", "zs_library", "zs_raw_fuzzer", "zs_unittest")
+load("../defs.bzl", "cross_platform_labels", "relative_headers", "zs_cxxbinary", "zs_cxxlibrary", "zs_fuzzers", "zs_library", "zs_raw_fuzzer", "zs_unittest")
 
 oncall("data_compression")
 
@@ -17,6 +17,7 @@ zs_unittest(
         "DEFAULT": [],
         "ovr_config//runtime:fbcode-no-arvr": ["-DUSE_JEMALLOC"],
     }),
+    source_headers = ["unittest/common/sha_vec.h", "unittest/common/test_errors_in_c.h"],
     supports_static_listing = False,
     deps = [
         "..:common",
@@ -42,6 +43,7 @@ zs_unittest(
     ),
     headers = glob(["compress/**/*.h"]),
     labels = cross_platform_labels(),
+    source_headers = ["compress/ml_selectors/test_zstrong_ml_core_models.h"],
     deps = [
         "..:compress",
         "../tools/sddl2/assembler:lib",
@@ -127,6 +129,15 @@ zs_unittest(
     srcs = glob(["zstrong/**/test_*.cpp"]),
     headers = glob(["zstrong/**/test_*.h"]),
     labels = cross_platform_labels(),
+    source_headers = [
+        "zstrong/test_fixed_fixture.h",
+        "zstrong/test_integer_fixture.h",
+        "zstrong/test_multi_input_fixture.h",
+        "zstrong/test_serialized.h",
+        "zstrong/test_serialized_fixture.h",
+        "zstrong/test_variable_fixture.h",
+        "zstrong/test_zstrong_fixture.h",
+    ],
     deps = [
         "..:zstronglib",
         "datagen:datagen",
@@ -137,7 +148,18 @@ zs_unittest(
 zs_cxxlibrary(
     name = "test_zstrong_fixtures",
     srcs = glob(["zstrong/**/*ixture.cpp"]),
-    headers = glob(["zstrong/**/*ixture.h"]),
+    headers = relative_headers(glob(["zstrong/**/*ixture.h"]))
+    | {
+        header: header
+        for header in [
+            "zstrong/test_fixed_fixture.h",
+            "zstrong/test_integer_fixture.h",
+            "zstrong/test_multi_input_fixture.h",
+            "zstrong/test_serialized_fixture.h",
+            "zstrong/test_variable_fixture.h",
+            "zstrong/test_zstrong_fixture.h",
+        ]
+    },
     deps = [
         "..:zstronglib",
         "datagen:datagen",
@@ -171,9 +193,10 @@ zs_cxxlibrary(
     srcs = [
         "ml_selector_utils.cpp",
     ],
-    headers = [
-        "ml_selector_utils.h",
-    ],
+    headers = {
+        "ml_selector_utils.h": "ml_selector_utils.h",
+        "tests/ml_selector_utils.h": "ml_selector_utils.h",
+    },
     exported_deps = [
         "..:compress",
     ],
@@ -185,10 +208,12 @@ zs_cxxlibrary(
         "local_params_utils.cpp",
         "utils.cpp",
     ],
-    headers = [
-        "local_params_utils.h",
-        "utils.h",
-    ],
+    headers = {
+        "local_params_utils.h": "local_params_utils.h",
+        "tests/local_params_utils.h": "local_params_utils.h",
+        "tests/utils.h": "utils.h",
+        "utils.h": "utils.h",
+    },
     deps = [
         "registry:openzl_input",
     ],
@@ -227,9 +252,7 @@ zs_library(
     srcs = [
         "zs2_selector_optimization.c",
     ],
-    headers = [
-        "zs2_selector_optimization.h",
-    ],
+    headers = {"tests/zs2_selector_optimization.h": "zs2_selector_optimization.h", "zs2_selector_optimization.h": "zs2_selector_optimization.h"},
     exported_deps = [
         "..:zstronglib",
         "../tools:timefn",

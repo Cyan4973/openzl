@@ -13,6 +13,7 @@ cpp_unittest(
     srcs = glob(["test_*.cpp"]),
     headers = relative_headers(glob(["test_*.h"])),
     header_namespace = "",
+    source_headers = ["test_prob_selector_fixture.h"],
     deps = [
         "../../tulip_v2/tests:tulip_v2_data_utils",
         ":thrift_test_utils",
@@ -28,7 +29,8 @@ cpp_library(
     headers = relative_headers([
         "test_prob_selector_fixture.h",
         "util.h",
-    ]),
+    ])
+    | {"test_prob_selector_fixture.h": "test_prob_selector_fixture.h", "util.h": "util.h"},
     header_namespace = "",
     exported_deps = [
         "..:thrift_lib",

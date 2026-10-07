@@ -9,15 +9,13 @@ zs_cxxlibrary(
     srcs = [
         "parse.cpp",
     ],
-    headers = [
-        "parse.h",
-    ],
+    headers = {"cli/utils/parse.h": "parse.h", "parse.h": "parse.h"},
 )
 
 zs_cxxlibrary(
     name = "profile_graphs",
     srcs = ["profile_graphs.cpp"],
-    headers = ["profile_graphs.h"],
+    headers = {"cli/utils/profile_graphs.h": "profile_graphs.h", "profile_graphs.h": "profile_graphs.h"},
     exported_deps = [
         "../..:zstronglib",
     ],
@@ -29,10 +27,12 @@ zs_cxxlibrary(
         "compress_profiles.cpp",
         "util.cpp",
     ],
-    headers = [
-        "compress_profiles.h",
-        "util.h",
-    ],
+    headers = {
+        "cli/utils/compress_profiles.h": "compress_profiles.h",
+        "cli/utils/util.h": "util.h",
+        "compress_profiles.h": "compress_profiles.h",
+        "util.h": "util.h",
+    },
     deps = [
         "../..:zstronglib",
         "../../cpp:openzl_cpp",

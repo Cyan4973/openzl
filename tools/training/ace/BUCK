@@ -24,7 +24,17 @@ cpp_library(
         "ace_sampling.h",
         "ace_utils.h",
         "automated_compressor_explorer.h",
-    ]),
+    ])
+    | {
+        header: header
+        for header in [
+            "ace.h",
+            "ace_compressor.h",
+            "ace_compressors.h",
+            "ace_utils.h",
+            "automated_compressor_explorer.h",
+        ]
+    },
     header_namespace = "",
     deps = [
         "../../..:zstronglib",

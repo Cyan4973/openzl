@@ -7,16 +7,17 @@ oncall("data_compression")
 zs_cxxlibrary(
     name = "args",
     srcs = ["ArgsUtils.cpp"],
-    headers = [
-        "ArgsUtils.h",
-        "BenchmarkArgs.h",
-        "CompressArgs.h",
-        "DecompressArgs.h",
-        "GlobalArgs.h",
-        "InspectArgs.h",
-        "ListProfilesArgs.h",
-        "TrainArgs.h",
-    ],
+    headers = {
+        "ArgsUtils.h": "ArgsUtils.h",
+        "cli/args/ArgsUtils.h": "ArgsUtils.h",
+        "cli/args/BenchmarkArgs.h": "BenchmarkArgs.h",
+        "cli/args/CompressArgs.h": "CompressArgs.h",
+        "cli/args/DecompressArgs.h": "DecompressArgs.h",
+        "cli/args/GlobalArgs.h": "GlobalArgs.h",
+        "cli/args/InspectArgs.h": "InspectArgs.h",
+        "cli/args/ListProfilesArgs.h": "ListProfilesArgs.h",
+        "cli/args/TrainArgs.h": "TrainArgs.h",
+    },
     exported_deps = [
         "..:cmd",
         "../../cpp:openzl_cpp",

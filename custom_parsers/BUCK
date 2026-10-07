@@ -11,9 +11,7 @@ zs_library(
     srcs = [
         "dependency_registration.cpp",
     ],
-    headers = [
-        "dependency_registration.h",
-    ],
+    headers = {"custom_parsers/dependency_registration.h": "dependency_registration.h", "dependency_registration.h": "dependency_registration.h"},
     deps = [
         "..:zstronglib",
         "../cpp:openzl_cpp",
@@ -27,7 +25,7 @@ cpp_library(
     # @autodeps-skip
     name = "zip_lexer",
     srcs = ["zip_lexer.c"],
-    headers = relative_headers(["zip_lexer.h"]),
+    headers = relative_headers(["zip_lexer.h"]) | {"zip_lexer.h": "zip_lexer.h"},
     header_namespace = "",
     deps = [
         "..:zstronglib",
@@ -38,7 +36,7 @@ cpp_library(
     # @autodeps-skip
     name = "pytorch_model_parser",
     srcs = ["pytorch_model_parser.c"],
-    headers = relative_headers(["pytorch_model_parser.h"]),
+    headers = relative_headers(["pytorch_model_parser.h"]) | {"pytorch_model_parser.h": "pytorch_model_parser.h"},
     header_namespace = "",
     deps = [
         "..:zstronglib",

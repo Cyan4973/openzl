@@ -8,7 +8,7 @@ oncall("data_compression")
 zs_cxxlibrary(
     name = "utils",
     srcs = ["utils.cpp"],
-    headers = ["utils.h"],
+    headers = {"tools/protobuf/tests/utils.h": "utils.h", "utils.h": "utils.h"},
     resources = glob(["resources/*"]),
     exported_deps = [
         "../../..:zstronglib",

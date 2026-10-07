@@ -1,6 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-load("../../defs.bzl", "zs_library")
+load("../../defs.bzl", "relative_headers", "zs_library")
 
 oncall("data_compression")
 
@@ -10,9 +10,12 @@ zs_library(
         "*.c",
         "*.cpp",
     ]),
-    headers = glob([
-        "*.h",
-    ]),
+    headers = relative_headers(
+        glob([
+            "*.h",
+        ])
+    )
+    | {"sddl_profile.h": "sddl_profile.h"},
     deps = [
         "../../tools/sddl/compiler:lib",
         "../shared_components:clustering",
