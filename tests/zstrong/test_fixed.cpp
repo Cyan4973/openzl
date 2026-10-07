@@ -92,6 +92,19 @@ TEST_F(FixedTest, HuffmanGraph2)
     test();
 }
 
+TEST_F(FixedTest, EntropyGraph2LargeInput)
+{
+    reset();
+    auto graph = ZL_Compressor_registerStaticGraph_fromNode1o(
+            cgraph_, ZL_NODE_INTERPRET_AS_LE16, ZL_GRAPH_ENTROPY);
+    finalizeGraph(graph, 2);
+    // Large enough for the entropy graph to chunk 16-bit inputs; 1 << 19 is an
+    // exact multiple of the chunk size.
+    testRoundTrip(generatedData(600000, 100));
+    testRoundTrip(generatedData(600000, 1000));
+    testRoundTrip(generatedData(1 << 19, 1000));
+}
+
 TEST_F(FixedTest, Zstd)
 {
     setFormatVersion(10); // Last version that supported ZSTD_FIXED

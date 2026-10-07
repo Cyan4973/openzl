@@ -553,10 +553,12 @@ static ZL_RESULT_OF(ZL_EdgeList)
     size_t const nbElts   = ZL_Input_numElts(input);
     ZL_ASSERT_NE(ZL_Input_type(input) & (ZL_Type_serial | ZL_Type_struct), 0);
 
-    // TODO: These are taken directly from the entropy compression library to
-    // match behavior. We should look into tuning these.
-    size_t const kChunkSize      = 1 << 15;
-    size_t const kMinSizeToChunk = 100000;
+    // TODO: The 8-bit values are taken directly from the entropy compression
+    // library to match behavior. 16-bit uses larger chunks to amortize its much
+    // larger statistics table. We should look into tuning these.
+    bool const is16              = ZL_Input_eltWidth(input) == 2;
+    size_t const kChunkSize      = is16 ? (size_t)1 << 18 : (size_t)1 << 15;
+    size_t const kMinSizeToChunk = is16 ? 400000 : 100000;
     if (nbElts < kMinSizeToChunk) {
         ZL_EdgeList out = { .edges = sctx, .nbEdges = 1 };
         return ZL_WRAP_VALUE(out);
