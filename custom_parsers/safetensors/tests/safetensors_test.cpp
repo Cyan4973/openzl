@@ -12,6 +12,8 @@
 #include "custom_parsers/safetensors/safetensors_lexer.h"
 #include "custom_parsers/safetensors/safetensors_parser.h"
 #include "custom_parsers/safetensors/tests/safetensors_builder.h"
+#include "custom_parsers/shared_components/tensor_chunker.h"
+#include "custom_parsers/shared_components/tensor_graphs.h"
 #include "openzl/cpp/CompressIntrospectionHooks.hpp"
 #include "openzl/openzl.hpp"
 #include "openzl/zl_reflection.h"
@@ -422,7 +424,7 @@ class ChunkRecorder : public CompressIntrospectionHooks {
 
 TEST_F(SafetensorsCompressorTest, CapsTheNumberOfSegmentsPerChunk)
 {
-    const size_t kMaxSegmentsPerChunk = 256; // ST_MAX_SEGMENTS_PER_CHUNK
+    const size_t kMaxSegmentsPerChunk = 256; // TC_MAX_SEGMENTS_PER_CHUNK
     const size_t tensorBytes          = 16 << 10;
     std::vector<TensorSpec> tensors;
     tensors.reserve(kMaxSegmentsPerChunk);
@@ -633,6 +635,74 @@ TEST_F(SafetensorsCompressorTest, SendsOnlyLowCardinalityTensorsToTransformer)
 
     EXPECT_EQ(onWeights.count, 0u);
     EXPECT_GT(onMask.count, 0u) << "graphs seen: " << onMask.seen;
+}
+
+/// A format with an 8-byte header followed by a single tensor of 16-bit
+/// integers.
+struct FakeToken {
+    const char* ptr;
+    size_t size;
+    bool isTensor;
+};
+
+ZL_Report lexFakeFormat(
+        const void* src,
+        size_t srcSize,
+        void* tokens,
+        size_t,
+        ZL_ErrorContext*)
+{
+    if (srcSize <= 8) {
+        return ZL_returnError(ZL_ErrorCode_graph_parser_malformedInput);
+    }
+    if (tokens != nullptr) {
+        const auto* const ptr = static_cast<const char*>(src);
+        auto* const out       = static_cast<FakeToken*>(tokens);
+        out[0]                = { ptr, 8, false };
+        out[1]                = { ptr + 8, srcSize - 8, true };
+    }
+    return ZL_returnValue(2);
+}
+
+ZL_TensorInfo describeFakeToken(const void* token, size_t)
+{
+    const auto& t = *static_cast<const FakeToken*>(token);
+    if (!t.isTensor) {
+        return ZL_TensorInfo{ t.ptr, t.size, ZL_TensorClass_header, 1 };
+    }
+    return ZL_TensorInfo{ t.ptr, t.size, ZL_TensorClass_int16, 2 };
+}
+
+const ZL_TensorFormat kFakeFormat = {
+    .name             = "fake",
+    .defaultChunkSize = ZL_SAFETENSORS_DEFAULT_CHUNK_SIZE,
+    .tokenSize        = sizeof(FakeToken),
+    .lex              = lexFakeFormat,
+    .describe         = describeFakeToken,
+};
+
+ZL_Report segmentFakeFormat(ZL_Segmenter* sctx)
+{
+    return ZL_TensorChunker_segment(sctx, &kFakeFormat);
+}
+
+TEST_F(SafetensorsCompressorTest, SendsTagsUnknownToTheCompressorToRaw)
+{
+    // Like a compressor serialized before ZL_TensorClass_int16 was added.
+    const ZL_GraphID successors[2] = { ZL_GRAPH_ZSTD,
+                                       ZL_GRAPH_COMPRESS_GENERIC };
+    const auto gid                 = ZL_TensorChunker_registerSegmenter(
+            compressor_.get(),
+            "!Fake Segmenter",
+            segmentFakeFormat,
+            ZL_SAFETENSORS_DEFAULT_CHUNK_SIZE,
+            "!Fake Parser",
+            successors,
+            2);
+    ASSERT_FALSE(ZL_RES_isError(gid));
+    compressor_.selectStartingGraph(ZL_RES_value(gid));
+
+    expectRoundTrip(std::string(8, 'h') + pseudoRandomBytes(10000, 3));
 }
 
 TEST_F(SafetensorsCompressorTest, SerializedCompressorCanBeReloaded)
