@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <string_view>
@@ -12,6 +13,8 @@
 #include "custom_parsers/safetensors/safetensors_lexer.h"
 #include "custom_parsers/safetensors/safetensors_parser.h"
 #include "custom_parsers/safetensors/tests/safetensors_builder.h"
+#include "custom_parsers/shared_components/tensor_chunker.h"
+#include "custom_parsers/shared_components/tensor_graphs.h"
 #include "openzl/cpp/CompressIntrospectionHooks.hpp"
 #include "openzl/openzl.hpp"
 #include "openzl/zl_reflection.h"
@@ -422,7 +425,7 @@ class ChunkRecorder : public CompressIntrospectionHooks {
 
 TEST_F(SafetensorsCompressorTest, CapsTheNumberOfSegmentsPerChunk)
 {
-    const size_t kMaxSegmentsPerChunk = 256; // ST_MAX_SEGMENTS_PER_CHUNK
+    const size_t kMaxSegmentsPerChunk = 256; // TC_MAX_SEGMENTS_PER_CHUNK
     const size_t tensorBytes          = 16 << 10;
     std::vector<TensorSpec> tensors;
     tensors.reserve(kMaxSegmentsPerChunk);
@@ -633,6 +636,126 @@ TEST_F(SafetensorsCompressorTest, SendsOnlyLowCardinalityTensorsToTransformer)
 
     EXPECT_EQ(onWeights.count, 0u);
     EXPECT_GT(onMask.count, 0u) << "graphs seen: " << onMask.seen;
+}
+
+/// A format with an 8-byte header followed by a single tensor of 16-bit
+/// integers.
+struct FakeToken {
+    const char* ptr;
+    size_t size;
+    bool isTensor;
+};
+
+ZL_Report lexFakeFormat(
+        const void* src,
+        size_t srcSize,
+        void* tokens,
+        size_t,
+        ZL_ErrorContext*)
+{
+    if (srcSize <= 8) {
+        return ZL_returnError(ZL_ErrorCode_graph_parser_malformedInput);
+    }
+    if (tokens != nullptr) {
+        const auto* const ptr = static_cast<const char*>(src);
+        auto* const out       = static_cast<FakeToken*>(tokens);
+        out[0]                = { ptr, 8, false };
+        out[1]                = { ptr + 8, srcSize - 8, true };
+    }
+    return ZL_returnValue(2);
+}
+
+ZL_TensorInfo describeFakeToken(const void* token, size_t)
+{
+    const auto& t = *static_cast<const FakeToken*>(token);
+    if (!t.isTensor) {
+        return ZL_TensorInfo{ t.ptr, t.size, ZL_TensorClass_header, 1 };
+    }
+    return ZL_TensorInfo{ t.ptr, t.size, ZL_TensorClass_int16, 2 };
+}
+
+const ZL_TensorFormat kFakeFormat = {
+    .name             = "fake",
+    .defaultChunkSize = ZL_SAFETENSORS_DEFAULT_CHUNK_SIZE,
+    .tokenSize        = sizeof(FakeToken),
+    .lex              = lexFakeFormat,
+    .describe         = describeFakeToken,
+};
+
+ZL_Report segmentFakeFormat(ZL_Segmenter* sctx)
+{
+    return ZL_TensorChunker_segment(sctx, &kFakeFormat);
+}
+
+TEST_F(SafetensorsCompressorTest, SendsTagsUnknownToTheCompressorToRaw)
+{
+    // Like a compressor serialized before ZL_TensorClass_int16 was added.
+    const ZL_GraphID successors[2] = { ZL_GRAPH_ZSTD,
+                                       ZL_GRAPH_COMPRESS_GENERIC };
+    const auto gid                 = ZL_TensorChunker_registerSegmenter(
+            compressor_.get(),
+            "!Fake Segmenter",
+            segmentFakeFormat,
+            ZL_SAFETENSORS_DEFAULT_CHUNK_SIZE,
+            "!Fake Parser",
+            successors,
+            2);
+    ASSERT_FALSE(ZL_RES_isError(gid));
+    compressor_.selectStartingGraph(ZL_RES_value(gid));
+
+    expectRoundTrip(std::string(8, 'h') + pseudoRandomBytes(10000, 3));
+}
+
+/// Counts so many tokens that the sizes of their buffers wrap around to a few
+/// bytes.
+ZL_Report countTooManyFakeTokens(
+        const void*,
+        size_t,
+        void* tokens,
+        size_t,
+        ZL_ErrorContext*)
+{
+    if (tokens != nullptr) {
+        ADD_FAILURE() << "tokens lexed into buffers of wrapped sizes";
+        return ZL_returnValue(0);
+    }
+    return ZL_returnValue(SIZE_MAX / 4 + 2);
+}
+
+const ZL_TensorFormat kTooManyTokensFormat = {
+    .name             = "fake",
+    .defaultChunkSize = ZL_SAFETENSORS_DEFAULT_CHUNK_SIZE,
+    .tokenSize        = sizeof(FakeToken),
+    .lex              = countTooManyFakeTokens,
+    .describe         = describeFakeToken,
+};
+
+ZL_Report segmentTooManyTokens(ZL_Segmenter* sctx)
+{
+    return ZL_TensorChunker_segment(sctx, &kTooManyTokensFormat);
+}
+
+TEST_F(SafetensorsCompressorTest, FallsBackWhenTokenBuffersWouldOverflow)
+{
+    const ZL_GraphID successors[2] = { ZL_GRAPH_ZSTD,
+                                       ZL_GRAPH_COMPRESS_GENERIC };
+    const auto gid                 = ZL_TensorChunker_registerSegmenter(
+            compressor_.get(),
+            "!Fake Segmenter",
+            segmentTooManyTokens,
+            ZL_SAFETENSORS_DEFAULT_CHUNK_SIZE,
+            "!Fake Parser",
+            successors,
+            2);
+    ASSERT_FALSE(ZL_RES_isError(gid));
+    compressor_.selectStartingGraph(ZL_RES_value(gid));
+
+    expectRoundTrip(std::string(8, 'h') + pseudoRandomBytes(10000, 3));
+
+    const auto warnings = get_warning_strings(cctx_);
+    ASSERT_EQ(warnings.size(), 1u);
+    EXPECT_NE(warnings[0].second.find("not parsed as fake"), std::string::npos)
+            << warnings[0].second;
 }
 
 TEST_F(SafetensorsCompressorTest, SerializedCompressorCanBeReloaded)
