@@ -61,8 +61,8 @@ void processDependencies(Compressor& compressor, poly::string_view serialized)
                 }
                 madeProgress = true;
             } else if (
-                    graphName == "GGUF Parser"
-                    || graphName == "GGUF Segmenter") {
+                    graphName == "GGUF Parser" || graphName == "GGUF Segmenter"
+                    || graphName == "Tensor Scale16") {
                 const auto result = ZL_GGUF_registerGraph(
                         compressor.get(), ZL_GGUF_DEFAULT_CHUNK_SIZE);
                 if (ZL_RES_isError(result)) {
