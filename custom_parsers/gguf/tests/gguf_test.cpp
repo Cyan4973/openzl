@@ -479,10 +479,10 @@ std::vector<GGUFTensorSpec> mixedTypeTensors()
         { "blk.1.w", ZL_GGUFType_f16, { 100, 30 }, pseudoRandomBytes(6000, 6) },
         { "blk.1.b", ZL_GGUFType_bf16, { 3000 }, pseudoRandomBytes(6000, 7) },
         { "blk.1.i", ZL_GGUFType_i32, { 30 }, pseudoRandomBytes(120, 8) },
-        { "blk.1.iq",
-          ZL_GGUFType_iq4_xs,
+        { "blk.1.q8k",
+          ZL_GGUFType_q8_k,
           { 256, 2 },
-          blocksOf(ZL_GGUFType_iq4_xs, 2, 9) },
+          blocksOf(ZL_GGUFType_q8_k, 2, 9) },
         { "future", 99, { 10 }, pseudoRandomBytes(10, 10) },
         { "partialBlock", ZL_GGUFType_q4_0, { 40 }, pseudoRandomBytes(23, 11) },
     };
@@ -656,18 +656,24 @@ TEST_F(GGUFCompressorTest, SplitsLargeQuantizedTensorsOnRowBoundaries)
     EXPECT_EQ(total, file.size());
 }
 
-/// Records the element width of the outputs of each split_by_struct codec.
+/// Records the element width of the outputs of each split_by_struct codec, and
+/// the first graph or codec each output reaches.
 class StructSplitRecorder : public CompressIntrospectionHooks {
    public:
     void on_codecEncode_start(
             ZL_Encoder*,
             const ZL_Compressor* compressor,
             ZL_NodeID nid,
-            const ZL_Input*[],
-            size_t) override
+            const ZL_Input* inputs[],
+            size_t nbInputs) override
     {
         const std::string_view name =
                 ZL_Compressor_Node_getName(compressor, nid);
+        // Type conversions inserted before a codec keep the same data.
+        for (size_t i = 0; i < nbInputs && !name.starts_with("zl.convert");
+             ++i) {
+            route(ZL_Input_ptr(inputs[i]), name);
+        }
         inSplit_ = name.starts_with("zl.split_by_struct");
     }
 
@@ -684,52 +690,155 @@ class StructSplitRecorder : public CompressIntrospectionHooks {
         widths.reserve(nbOutputs);
         for (size_t i = 0; i < nbOutputs; ++i) {
             widths.push_back(ZL_validResult(ZL_Output_eltWidth(outStreams[i])));
+            fields_.push_back(ZL_Output_constPtr(outStreams[i]));
+            fieldRoutes.emplace_back();
         }
         fieldWidths.push_back(widths);
         inSplit_ = false;
     }
 
+    void on_migraphEncode_start(
+            ZL_Graph*,
+            const ZL_Compressor* compressor,
+            ZL_GraphID gid,
+            ZL_Edge* inputs[],
+            size_t nbInputs) override
+    {
+        for (size_t i = 0; i < nbInputs; ++i) {
+            route(ZL_Input_ptr(ZL_Edge_getData(inputs[i])),
+                  ZL_Compressor_Graph_getName(compressor, gid));
+        }
+    }
+
     std::vector<std::vector<size_t>> fieldWidths;
+    std::vector<std::string> fieldRoutes;
 
    private:
+    void route(const void* data, std::string_view name)
+    {
+        for (size_t i = 0; i < fields_.size(); ++i) {
+            if (fields_[i] == data && fieldRoutes[i].empty()) {
+                fieldRoutes[i] = name;
+            }
+        }
+    }
+
+    std::vector<const void*> fields_;
     bool inSplit_ = false;
 };
 
+enum class FieldKind {
+    quants, ///< quantized values or sub-block scales
+    f16,    ///< a float16 scale
+    f8,     ///< 8-bit float scales
+};
+
+struct BlockField {
+    size_t size;
+    FieldKind kind;
+};
+
+/// Block layouts of ggml (ggml-common.h), whose ggml_half fields are float16
+/// scales.
+std::vector<std::pair<uint32_t, std::vector<BlockField>>> blockLayouts()
+{
+    constexpr auto q   = FieldKind::quants;
+    constexpr auto f16 = FieldKind::f16;
+    constexpr auto f8  = FieldKind::f8;
+    return {
+        { ZL_GGUFType_q4_0, { { 2, f16 }, { 16, q } } },
+        { ZL_GGUFType_q4_1, { { 2, f16 }, { 2, f16 }, { 16, q } } },
+        { ZL_GGUFType_q5_0, { { 2, f16 }, { 4, q }, { 16, q } } },
+        { ZL_GGUFType_q5_1, { { 2, f16 }, { 2, f16 }, { 4, q }, { 16, q } } },
+        { ZL_GGUFType_q8_0, { { 2, f16 }, { 32, q } } },
+        { ZL_GGUFType_q2_k, { { 16, q }, { 64, q }, { 2, f16 }, { 2, f16 } } },
+        { ZL_GGUFType_q3_k, { { 32, q }, { 64, q }, { 12, q }, { 2, f16 } } },
+        { ZL_GGUFType_q4_k, { { 2, f16 }, { 2, f16 }, { 12, q }, { 128, q } } },
+        { ZL_GGUFType_q5_k,
+          { { 2, f16 }, { 2, f16 }, { 12, q }, { 32, q }, { 128, q } } },
+        { ZL_GGUFType_q6_k, { { 128, q }, { 64, q }, { 16, q }, { 2, f16 } } },
+        { ZL_GGUFType_iq2_xxs, { { 2, f16 }, { 64, q } } },
+        { ZL_GGUFType_iq2_xs, { { 2, f16 }, { 64, q }, { 8, q } } },
+        { ZL_GGUFType_iq3_xxs, { { 2, f16 }, { 64, q }, { 32, q } } },
+        { ZL_GGUFType_iq1_s, { { 2, f16 }, { 32, q }, { 16, q } } },
+        { ZL_GGUFType_iq4_nl, { { 2, f16 }, { 16, q } } },
+        { ZL_GGUFType_iq3_s,
+          { { 2, f16 }, { 64, q }, { 8, q }, { 32, q }, { 4, q } } },
+        { ZL_GGUFType_iq2_s,
+          { { 2, f16 }, { 32, q }, { 32, q }, { 8, q }, { 8, q } } },
+        { ZL_GGUFType_iq4_xs, { { 2, f16 }, { 2, q }, { 4, q }, { 128, q } } },
+        { ZL_GGUFType_iq1_m, { { 32, q }, { 16, q }, { 8, q } } },
+        { ZL_GGUFType_tq1_0, { { 48, q }, { 4, q }, { 2, f16 } } },
+        { ZL_GGUFType_tq2_0, { { 64, q }, { 2, f16 } } },
+        { ZL_GGUFType_mxfp4, { { 1, f8 }, { 16, q } } },
+        { ZL_GGUFType_nvfp4, { { 4, f8 }, { 32, q } } },
+        { ZL_GGUFType_q1_0, { { 2, f16 }, { 16, q } } },
+        { ZL_GGUFType_q2_0, { { 2, f16 }, { 16, q } } },
+    };
+}
+
+/// A tensor of 64 blocks of @p type.
+std::string fileOfBlocks(uint32_t type)
+{
+    size_t blockElts = 0, blockBytes = 0;
+    EXPECT_TRUE(ZL_GGUF_typeLayout(type, &blockElts, &blockBytes));
+    return buildGGUF(
+            { { "w", type, { blockElts * 64 }, blocksOf(type, 64, type) } });
+}
+
 TEST_F(GGUFCompressorTest, SplitsQuantizedBlocksIntoTheirFields)
 {
-    // Block layouts of ggml (ggml-common.h).
-    const std::vector<std::pair<uint32_t, std::vector<size_t>>> layouts = {
-        { ZL_GGUFType_q4_0, { 2, 16 } },
-        { ZL_GGUFType_q4_1, { 2, 2, 16 } },
-        { ZL_GGUFType_q5_0, { 2, 4, 16 } },
-        { ZL_GGUFType_q5_1, { 2, 2, 4, 16 } },
-        { ZL_GGUFType_q8_0, { 2, 32 } },
-        { ZL_GGUFType_q2_k, { 16, 64, 2, 2 } },
-        { ZL_GGUFType_q3_k, { 32, 64, 12, 2 } },
-        { ZL_GGUFType_q4_k, { 2, 2, 12, 128 } },
-        { ZL_GGUFType_q5_k, { 2, 2, 12, 32, 128 } },
-        { ZL_GGUFType_q6_k, { 128, 64, 16, 2 } },
-    };
     useChunkSize(ZL_GGUF_DEFAULT_CHUNK_SIZE);
-    for (const auto& [type, fields] : layouts) {
-        size_t blockElts = 0, blockBytes = 0;
-        ASSERT_TRUE(ZL_GGUF_typeLayout(type, &blockElts, &blockBytes));
-        const auto file = buildGGUF(
-                { { "w",
-                    type,
-                    { blockElts * 64 },
-                    blocksOf(type, 64, type) } });
+    for (const auto& [type, fields] : blockLayouts()) {
         StructSplitRecorder recorder;
         attachHooks(recorder);
 
-        expectRoundTrip(file);
+        expectRoundTrip(fileOfBlocks(type));
 
-        const std::vector<std::vector<size_t>> expected = { fields };
+        std::vector<size_t> widths;
+        for (const auto& field : fields) {
+            widths.push_back(field.size);
+        }
+        const std::vector<std::vector<size_t>> expected = { widths };
         EXPECT_EQ(recorder.fieldWidths, expected) << "type " << type;
+        size_t blockElts = 0, blockBytes = 0;
+        ASSERT_TRUE(ZL_GGUF_typeLayout(type, &blockElts, &blockBytes));
         EXPECT_EQ(
-                std::accumulate(fields.begin(), fields.end(), size_t{ 0 }),
+                std::accumulate(widths.begin(), widths.end(), size_t{ 0 }),
                 blockBytes)
                 << "type " << type;
+    }
+}
+
+TEST_F(GGUFCompressorTest, RoutesEachFieldToTheGraphOfItsKind)
+{
+    useChunkSize(ZL_GGUF_DEFAULT_CHUNK_SIZE);
+    const auto graphName = [this](ZL_GraphID graph) {
+        return std::string(
+                ZL_Compressor_Graph_getName(compressor_.get(), graph));
+    };
+    const auto graphOf = [&](FieldKind kind) {
+        switch (kind) {
+            case FieldKind::f16:
+                return graphName(ZL_GRAPH_HUFFMAN);
+            case FieldKind::f8:
+                return graphName(ZL_GRAPH_FSE);
+            case FieldKind::quants:
+            default:
+                return graphName(ZL_GRAPH_ZSTD);
+        }
+    };
+    for (const auto& [type, fields] : blockLayouts()) {
+        StructSplitRecorder recorder;
+        attachHooks(recorder);
+
+        expectRoundTrip(fileOfBlocks(type));
+
+        std::vector<std::string> expected;
+        for (const auto& field : fields) {
+            expected.push_back(graphOf(field.kind));
+        }
+        EXPECT_EQ(recorder.fieldRoutes, expected) << "type " << type;
     }
 }
 
