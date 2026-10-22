@@ -2,8 +2,6 @@
 
 #include "custom_parsers/gguf/gguf_parser.h"
 
-#include <stdbool.h>
-
 #include "custom_parsers/gguf/gguf_lexer.h"
 #include "custom_parsers/shared_components/tensor_chunker.h"
 #include "custom_parsers/shared_components/tensor_graphs.h"
@@ -27,31 +25,61 @@ ZL_STATIC_ASSERT(
 
 #define GG_MAX_FIELDS 5
 
-/// Fields of a quantized block in storage order. Scales are float16 values;
-/// the other fields hold packed quantized values or sub-block scales.
+typedef enum {
+    GG_q,   ///< packed quantized values or sub-block scales
+    GG_f16, ///< a float16 scale
+    GG_f8,  ///< 8-bit float scales (E8M0, E4M3)
+} GG_FieldKind;
+
+/// Fields of a quantized block in storage order.
 typedef struct {
     uint32_t type;
     size_t nbFields;
     size_t sizes[GG_MAX_FIELDS];
-    bool isScale[GG_MAX_FIELDS];
+    GG_FieldKind kinds[GG_MAX_FIELDS];
 } GG_BlockLayout;
 
 // Fields in the order of the block structs of ggml/src/ggml-common.h, e.g.
 // block_q2_K = { scales, qs, d, dmin } and block_q6_K = { ql, qh, scales, d }.
+// block_iq2_s.qs holds grid indices then signs, and block_iq3_xxs.qs grid
+// indices then scales and signs: both are split here.
+// block_iq1_m has no float16 field: its scale is spread over its sub-block
+// scales.
 static const GG_BlockLayout kBlockLayouts[] = {
-    { ZL_GGUFType_q4_0, 2, { 2, 16 }, { true, false } },
-    { ZL_GGUFType_q4_1, 3, { 2, 2, 16 }, { true, true, false } },
-    { ZL_GGUFType_q5_0, 3, { 2, 4, 16 }, { true, false, false } },
-    { ZL_GGUFType_q5_1, 4, { 2, 2, 4, 16 }, { true, true, false, false } },
-    { ZL_GGUFType_q8_0, 2, { 2, 32 }, { true, false } },
-    { ZL_GGUFType_q2_k, 4, { 16, 64, 2, 2 }, { false, false, true, true } },
-    { ZL_GGUFType_q3_k, 4, { 32, 64, 12, 2 }, { false, false, false, true } },
-    { ZL_GGUFType_q4_k, 4, { 2, 2, 12, 128 }, { true, true, false, false } },
+    { ZL_GGUFType_q4_0, 2, { 2, 16 }, { GG_f16, GG_q } },
+    { ZL_GGUFType_q4_1, 3, { 2, 2, 16 }, { GG_f16, GG_f16, GG_q } },
+    { ZL_GGUFType_q5_0, 3, { 2, 4, 16 }, { GG_f16, GG_q, GG_q } },
+    { ZL_GGUFType_q5_1, 4, { 2, 2, 4, 16 }, { GG_f16, GG_f16, GG_q, GG_q } },
+    { ZL_GGUFType_q8_0, 2, { 2, 32 }, { GG_f16, GG_q } },
+    { ZL_GGUFType_q2_k, 4, { 16, 64, 2, 2 }, { GG_q, GG_q, GG_f16, GG_f16 } },
+    { ZL_GGUFType_q3_k, 4, { 32, 64, 12, 2 }, { GG_q, GG_q, GG_q, GG_f16 } },
+    { ZL_GGUFType_q4_k, 4, { 2, 2, 12, 128 }, { GG_f16, GG_f16, GG_q, GG_q } },
     { ZL_GGUFType_q5_k,
       5,
       { 2, 2, 12, 32, 128 },
-      { true, true, false, false, false } },
-    { ZL_GGUFType_q6_k, 4, { 128, 64, 16, 2 }, { false, false, false, true } },
+      { GG_f16, GG_f16, GG_q, GG_q, GG_q } },
+    { ZL_GGUFType_q6_k, 4, { 128, 64, 16, 2 }, { GG_q, GG_q, GG_q, GG_f16 } },
+    { ZL_GGUFType_iq2_xxs, 2, { 2, 64 }, { GG_f16, GG_q } },
+    { ZL_GGUFType_iq2_xs, 3, { 2, 64, 8 }, { GG_f16, GG_q, GG_q } },
+    { ZL_GGUFType_iq3_xxs, 3, { 2, 64, 32 }, { GG_f16, GG_q, GG_q } },
+    { ZL_GGUFType_iq1_s, 3, { 2, 32, 16 }, { GG_f16, GG_q, GG_q } },
+    { ZL_GGUFType_iq4_nl, 2, { 2, 16 }, { GG_f16, GG_q } },
+    { ZL_GGUFType_iq3_s,
+      5,
+      { 2, 64, 8, 32, 4 },
+      { GG_f16, GG_q, GG_q, GG_q, GG_q } },
+    { ZL_GGUFType_iq2_s,
+      5,
+      { 2, 32, 32, 8, 8 },
+      { GG_f16, GG_q, GG_q, GG_q, GG_q } },
+    { ZL_GGUFType_iq4_xs, 4, { 2, 2, 4, 128 }, { GG_f16, GG_q, GG_q, GG_q } },
+    { ZL_GGUFType_iq1_m, 3, { 32, 16, 8 }, { GG_q, GG_q, GG_q } },
+    { ZL_GGUFType_tq1_0, 3, { 48, 4, 2 }, { GG_q, GG_q, GG_f16 } },
+    { ZL_GGUFType_tq2_0, 2, { 64, 2 }, { GG_q, GG_f16 } },
+    { ZL_GGUFType_mxfp4, 2, { 1, 16 }, { GG_f8, GG_q } },
+    { ZL_GGUFType_nvfp4, 2, { 4, 32 }, { GG_f8, GG_q } },
+    { ZL_GGUFType_q1_0, 2, { 2, 16 }, { GG_f16, GG_q } },
+    { ZL_GGUFType_q2_0, 2, { 2, 16 }, { GG_f16, GG_q } },
 };
 #define GG_NB_BLOCK_LAYOUTS (sizeof(kBlockLayouts) / sizeof(kBlockLayouts[0]))
 
@@ -156,14 +184,28 @@ static ZL_Report GG_segmenterFn(ZL_Segmenter* sctx)
  * ------------------------------------------------------------------------ */
 
 /// Quantized values and sub-block scales are nearly uniform bytes, where the
-/// Huffman stage of zstd beats FSE; float16 scales are coded as 16-bit symbols.
+/// Huffman stage of zstd beats FSE; float16 scales are coded as 16-bit symbols;
+/// 8-bit float scales take few values, where FSE beats Huffman.
+static ZL_GraphID GG_fieldGraph(GG_FieldKind kind)
+{
+    switch (kind) {
+        case GG_f16:
+            return ZL_GRAPH_HUFFMAN;
+        case GG_f8:
+            return ZL_GRAPH_FSE;
+        case GG_q:
+        default:
+            return ZL_GRAPH_ZSTD;
+    }
+}
+
 static ZL_GraphID GG_blockSuccessor(
         ZL_Compressor* compressor,
         const GG_BlockLayout* layout)
 {
     ZL_GraphID fieldGraphs[GG_MAX_FIELDS];
     for (size_t i = 0; i < layout->nbFields; ++i) {
-        fieldGraphs[i] = layout->isScale[i] ? ZL_GRAPH_HUFFMAN : ZL_GRAPH_ZSTD;
+        fieldGraphs[i] = GG_fieldGraph(layout->kinds[i]);
     }
     return ZL_Compressor_buildACEGraphWithDefault(
             compressor,

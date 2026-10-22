@@ -16,10 +16,10 @@ ZL_BEGIN_C_DECLS
  * Each tensor becomes its own stream, sent to a successor selected by type;
  * consecutive tensors smaller than 16 KiB share a stream, sent to the raw
  * successor when their types differ. Float and integer tensors are handled
- * like their safetensors counterparts. Blocks of the common quantized types
- * (Q4_0, Q4_1, Q5_0, Q5_1, Q8_0 and the K-quants) are split into their fields:
- * float16 scales and packed quantized values are compressed separately. Other
- * quantized types are compressed as bytes. Quantized weights are already
+ * like their safetensors counterparts. Blocks of quantized types are split
+ * into their fields: scales and packed quantized values are compressed
+ * separately. Only Q8_1 and Q8_K, which llama.cpp uses for activations rather
+ * than stored weights, are compressed as bytes. Quantized weights are already
  * dense: the gain over zstd is a few percent, and decompression is slower than
  * zstd's.
  * Successors are ACE graphs, so the resulting compressor can be trained.
