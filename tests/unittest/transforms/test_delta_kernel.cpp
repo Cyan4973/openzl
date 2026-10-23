@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+#include <random>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -60,5 +61,20 @@ TYPED_TEST(DeltaKernelTest, RoundTrip)
         255,
     };
     this->testInput(input);
+}
+
+// Vectorized kernels process up to 64 elements per iteration:
+// sizes up to 150 cover several iterations and every tail length.
+TYPED_TEST(DeltaKernelTest, SizeSweepRoundTrip)
+{
+    std::mt19937_64 gen(0xde17a);
+    for (size_t n = 1; n <= 150; ++n) {
+        SCOPED_TRACE(n);
+        std::vector<TypeParam> input(n);
+        for (auto& v : input) {
+            v = TypeParam(gen());
+        }
+        this->testInput(input);
+    }
 }
 } // namespace
