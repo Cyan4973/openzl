@@ -267,6 +267,19 @@ TEST(SplitByStruct, test_splitByStruct_byteFields)
     }
 }
 
+TEST(SplitByStruct, test_splitByStruct_wideFields)
+{
+    // Several blocks of structures and a partial one
+    for (size_t nbStructs : { 1007, 4096 }) {
+        fieldsRoundTrip({ 2, 32 }, nbStructs);
+        fieldsRoundTrip({ 2, 2, 12, 128 }, nbStructs);
+        fieldsRoundTrip({ 8, 1, 4, 2, 3, 15 }, nbStructs);
+        fieldsRoundTrip({ 64, 16, 9 }, nbStructs);
+    }
+    // Structures larger than a block
+    fieldsRoundTrip({ 20000, 1 }, 3);
+}
+
 TEST(SplitByStruct, test_splitByStruct_invalidInputSize)
 {
     cFailTest(
