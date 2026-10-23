@@ -21,6 +21,11 @@
 
 #    include <tmmintrin.h>
 
+/* Each iteration computes the prefix sums of one vector of deltas, then adds
+ * them to `prev`, the last value decoded so far. `prev` is updated from the
+ * local prefix sums rather than from the stored result, so that only one add
+ * sits on the dependency chain between iterations, not the shuffle. */
+
 static size_t
 ZS_deltaDecode8_ssse3(uint8_t* dst, uint8_t const* deltas, size_t nbElts)
 {
@@ -34,9 +39,9 @@ ZS_deltaDecode8_ssse3(uint8_t* dst, uint8_t const* deltas, size_t nbElts)
         values         = _mm_add_epi8(values, _mm_slli_si128(values, 4));
         values         = _mm_add_epi8(values, _mm_slli_si128(values, 2));
         values         = _mm_add_epi8(values, _mm_slli_si128(values, 1));
-        values         = _mm_add_epi8(values, prev);
-        prev           = _mm_shuffle_epi8(values, _mm_set1_epi8(0x0f));
-        _mm_storeu_si128((__m128i_u*)&dst[n], values);
+        _mm_storeu_si128((__m128i_u*)&dst[n], _mm_add_epi8(values, prev));
+        prev = _mm_add_epi8(
+                prev, _mm_shuffle_epi8(values, _mm_set1_epi8(0x0f)));
     }
     return n;
 }
@@ -53,9 +58,9 @@ ZS_deltaDecode16_ssse3(uint16_t* dst, uint16_t const* deltas, size_t nbElts)
         values         = _mm_add_epi16(values, _mm_slli_si128(values, 8));
         values         = _mm_add_epi16(values, _mm_slli_si128(values, 4));
         values         = _mm_add_epi16(values, _mm_slli_si128(values, 2));
-        values         = _mm_add_epi16(values, prev);
-        prev           = _mm_shuffle_epi8(values, _mm_set1_epi16(0x0f0e));
-        _mm_storeu_si128((__m128i_u*)&dst[n], values);
+        _mm_storeu_si128((__m128i_u*)&dst[n], _mm_add_epi16(values, prev));
+        prev = _mm_add_epi16(
+                prev, _mm_shuffle_epi8(values, _mm_set1_epi16(0x0f0e)));
     }
     return n;
 }
@@ -78,9 +83,8 @@ ZS_deltaDecode32_ssse3(uint32_t* dst, uint32_t const* deltas, size_t nbElts)
         __m128i values = _mm_loadu_si128((__m128i_u const*)&deltas[n - 1]);
         values         = _mm_add_epi32(values, _mm_slli_si128(values, 8));
         values         = _mm_add_epi32(values, _mm_slli_si128(values, 4));
-        values         = _mm_add_epi32(values, prev);
-        prev           = _mm_shuffle_epi32(values, 0xff);
-        _mm_storeu_si128((__m128i_u*)&dst[n], values);
+        _mm_storeu_si128((__m128i_u*)&dst[n], _mm_add_epi32(values, prev));
+        prev = _mm_add_epi32(prev, _mm_shuffle_epi32(values, 0xff));
     }
     return n;
 }
