@@ -14,6 +14,7 @@
 #include "openzl/codecs/zl_split_by_struct.h"
 #include "openzl/codecs/zl_store.h"
 #include "openzl/codecs/zl_transformer.h"
+#include "openzl/codecs/zl_transpose.h"
 #include "openzl/codecs/zl_zstd.h"
 #include "openzl/common/assertion.h"
 #include "openzl/shared/bits.h"
@@ -366,12 +367,10 @@ ZL_TensorGraphs_registerScale16Graph(ZL_Compressor* compressor)
     if (existing.gid != ZL_GRAPH_ILLEGAL.gid) {
         return ZL_RESULT_WRAP_VALUE(ZL_GraphID, existing);
     }
-    const size_t byteSizes[2]                  = { 1, 1 };
-    const ZL_GraphID byteGraphs[2]             = { ZL_GRAPH_FSE, ZL_GRAPH_FSE };
     const ZL_GraphID candidates[TG_SCALE16_NB] = {
         [TG_scale16_huffman] = ZL_GRAPH_HUFFMAN,
-        [TG_scale16_bytes]   = ZL_Compressor_registerSplitByStructGraph(
-                compressor, byteSizes, byteGraphs, 2),
+        [TG_scale16_bytes]   = ZL_Compressor_registerTransposeSplitGraph(
+                compressor, ZL_GRAPH_FSE),
         // Keeps most of the gain of higher levels on repeated scales, at a
         // fraction of their cost.
         [TG_scale16_zstd] =

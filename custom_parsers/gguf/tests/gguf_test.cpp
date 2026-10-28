@@ -1000,12 +1000,10 @@ TEST_F(GGUFCompressorTest, ScaleSelectorPicksTheSmallestCandidate)
 {
     // The candidates of the selector, each the smallest on some patterns.
     Compressor candidates;
-    const size_t byteSizes[2]      = { 1, 1 };
-    const ZL_GraphID byteGraphs[2] = { ZL_GRAPH_FSE, ZL_GRAPH_FSE };
-    const ZL_GraphID graphs[]      = {
+    const ZL_GraphID graphs[] = {
         ZL_GRAPH_HUFFMAN,
-        ZL_Compressor_registerSplitByStructGraph(
-                candidates.get(), byteSizes, byteGraphs, 2),
+        ZL_Compressor_registerTransposeSplitGraph(
+                candidates.get(), ZL_GRAPH_FSE),
         ZL_Compressor_registerZstdGraph_withLevel(candidates.get(), 3),
     };
     const size_t nbScales = 400 * kRowBlocks;
