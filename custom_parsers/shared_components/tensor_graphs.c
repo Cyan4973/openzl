@@ -25,13 +25,17 @@
 #include "openzl/zl_selector.h"
 
 ZL_STATIC_ASSERT(
-        ZL_TensorClass_fp8 == 13,
+        ZL_TensorClass_upcast32 == 14,
         "ZL_TensorClass is append-only: serialized compressors rely on it");
 
 // A float tensor is atypical when an evenly spaced sample of its elements has
 // fewer than 1/TG_DISTINCT_RATIO distinct values (masks, constants, ...).
 #define TG_MIN_ELTS_FOR_SAMPLING 64
 #define TG_DISTINCT_RATIO 8
+// A float32 tensor is upcast when most of such a sample keeps these lowest
+// bits of the fraction at zero, as float16 and bfloat16 values converted to
+// float32 do.
+#define TG_UPCAST_ZERO_BITS 0x1FFFu
 
 static int TG_compareU32(const void* a, const void* b)
 {
@@ -63,6 +67,21 @@ static bool TG_isAtypical(
     return nbDistinct * TG_DISTINCT_RATIO < nbSamples;
 }
 
+static bool TG_isUpcast(const uint8_t* data, size_t nbElts)
+{
+    if (nbElts < TG_MIN_ELTS_FOR_SAMPLING) {
+        return false;
+    }
+    const size_t nbSamples = ZL_MIN(nbElts, (size_t)ZL_TENSOR_SAMPLE_SIZE);
+    const size_t stride    = nbElts / nbSamples;
+    size_t nbUpcast        = 0;
+    for (size_t i = 0; i < nbSamples; ++i) {
+        const uint32_t value = ZL_readLE32(data + i * stride * 4);
+        nbUpcast += (value & TG_UPCAST_ZERO_BITS) == 0;
+    }
+    return nbUpcast * 2 > nbSamples;
+}
+
 ZL_TensorClass ZL_TensorGraphs_refineClass(
         ZL_TensorClass cls,
         const uint8_t* data,
@@ -74,10 +93,14 @@ ZL_TensorClass ZL_TensorGraphs_refineClass(
         return cls;
     }
     const size_t eltSize = cls == ZL_TensorClass_f32 ? 4 : 2;
-    if (!TG_isAtypical(data, size / eltSize, eltSize, sample)) {
-        return cls;
+    if (TG_isAtypical(data, size / eltSize, eltSize, sample)) {
+        return eltSize == 2 ? ZL_TensorClass_atypical16
+                            : ZL_TensorClass_atypical32;
     }
-    return eltSize == 2 ? ZL_TensorClass_atypical16 : ZL_TensorClass_atypical32;
+    if (cls == ZL_TensorClass_f32 && TG_isUpcast(data, size / 4)) {
+        return ZL_TensorClass_upcast32;
+    }
+    return cls;
 }
 
 enum { TG_scale16_huffman, TG_scale16_bytes, TG_scale16_zstd, TG_SCALE16_NB };
@@ -414,15 +437,17 @@ static ZL_GraphID TG_numericSuccessor(
             ZL_Compressor_buildACEGraphWithDefault(compressor, defaultGraph));
 }
 
+/// Exponents are entropy coded, signs and fractions go to @p signFracGraph.
 static ZL_GraphID TG_floatSuccessor(
         ZL_Compressor* compressor,
         ZL_NodeID interpretNode,
-        ZL_NodeID deconstructNode)
+        ZL_NodeID deconstructNode,
+        ZL_GraphID signFracGraph)
 {
     const ZL_GraphID deconstruct = ZL_Compressor_registerStaticGraph_fromNode(
             compressor,
             deconstructNode,
-            ZL_GRAPHLIST(ZL_GRAPH_STORE, ZL_GRAPH_FSE));
+            ZL_GRAPHLIST(signFracGraph, ZL_GRAPH_FSE));
     return TG_numericSuccessor(compressor, interpretNode, deconstruct);
 }
 
@@ -463,9 +488,13 @@ void ZL_TensorGraphs_buildSuccessors(
     successors[ZL_TensorClass_bf16] = TG_floatSuccessor(
             compressor,
             ZL_NODE_INTERPRET_AS_LE16,
-            ZL_NODE_BFLOAT16_DECONSTRUCT);
+            ZL_NODE_BFLOAT16_DECONSTRUCT,
+            ZL_GRAPH_STORE);
     successors[ZL_TensorClass_f32] = TG_floatSuccessor(
-            compressor, ZL_NODE_INTERPRET_AS_LE32, ZL_NODE_FLOAT32_DECONSTRUCT);
+            compressor,
+            ZL_NODE_INTERPRET_AS_LE32,
+            ZL_NODE_FLOAT32_DECONSTRUCT,
+            ZL_GRAPH_STORE);
     successors[ZL_TensorClass_f64] = TG_numericSuccessor(
             compressor, ZL_NODE_INTERPRET_AS_LE64, ZL_GRAPH_COMPRESS_GENERIC);
     successors[ZL_TensorClass_atypical16] = TG_numericSuccessor(
@@ -482,4 +511,12 @@ void ZL_TensorGraphs_buildSuccessors(
             compressor,
             ZL_Compressor_registerStaticGraph_fromNode1o(
                     compressor, ZL_NODE_CONVERT_SERIAL_TO_STRUCT2, scale16));
+    // The zeros of the fraction are in its low bytes, entropy coded one by one,
+    // which would only slow down native float32, where these bytes are noise.
+    successors[ZL_TensorClass_upcast32] = TG_floatSuccessor(
+            compressor,
+            ZL_NODE_INTERPRET_AS_LE32,
+            ZL_NODE_FLOAT32_DECONSTRUCT,
+            ZL_Compressor_registerTransposeSplitGraph(
+                    compressor, ZL_GRAPH_FSE));
 }

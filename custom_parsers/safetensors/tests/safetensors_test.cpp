@@ -759,6 +759,48 @@ TEST_F(SafetensorsCompressorTest, CodesFp8TensorsBetterThanBytes)
     EXPECT_LT(expectRoundTrip(fp8), expectRoundTrip(u8));
 }
 
+/// float32 Gaussian weights keeping @p zeroBits of their fraction at zero, as
+/// weights converted from float16 (0x1fff) or bfloat16 (0xffff) do.
+std::string gaussianF32(size_t nbElts, uint32_t zeroBits)
+{
+    std::mt19937 rng(42);
+    std::normal_distribution<float> dist(0, 0.02f);
+    std::string bytes(nbElts * 4, '\0');
+    for (size_t i = 0; i < nbElts; ++i) {
+        const float value = dist(rng);
+        uint32_t bits;
+        memcpy(&bits, &value, 4);
+        bits &= ~zeroBits;
+        memcpy(&bytes[4 * i], &bits, 4);
+    }
+    return bytes;
+}
+
+TEST_F(SafetensorsCompressorTest, CodesUpcastFloat32NearTheir16BitSize)
+{
+    const std::vector<uint64_t> shape = { 64, 512 };
+    const auto native                 = buildSafetensors(
+            { { "w", "F32", shape, gaussianF32(64 * 512, 0) } });
+    const auto fromF16 = buildSafetensors(
+            { { "w", "F32", shape, gaussianF32(64 * 512, 0x1fff) } });
+    const auto fromBf16 = buildSafetensors(
+            { { "w", "F32", shape, gaussianF32(64 * 512, 0xffff) } });
+    useChunkSize(ZL_SAFETENSORS_DEFAULT_CHUNK_SIZE);
+    NodeCounter onNative(ZL_NODE_TRANSPOSE_SPLIT);
+    NodeCounter onUpcast(ZL_NODE_TRANSPOSE_SPLIT);
+
+    attachHooks(onNative);
+    const size_t nativeSize = expectRoundTrip(native);
+    attachHooks(onUpcast);
+    const size_t f16Size  = expectRoundTrip(fromF16);
+    const size_t bf16Size = expectRoundTrip(fromBf16);
+
+    EXPECT_EQ(onNative.count, 0u);
+    EXPECT_GT(onUpcast.count, 0u);
+    EXPECT_LT(f16Size, nativeSize * 2 / 3);
+    EXPECT_LT(bf16Size, nativeSize / 2);
+}
+
 /// A format with an 8-byte header followed by a single tensor of 16-bit
 /// integers.
 struct FakeToken {

@@ -27,8 +27,9 @@ typedef enum {
     ZL_TensorClass_f64,
     ZL_TensorClass_atypical16, // low-cardinality 16-bit floats
     ZL_TensorClass_atypical32, // low-cardinality 32-bit floats
-    ZL_TensorClass_scale16, // float16 or bfloat16 scales of quantized weights
-    ZL_TensorClass_fp8,     // 8-bit floats
+    ZL_TensorClass_scale16,  // float16 or bfloat16 scales of quantized weights
+    ZL_TensorClass_fp8,      // 8-bit floats
+    ZL_TensorClass_upcast32, // 32-bit floats converted from 16-bit floats
     ZL_TensorClass_count,
 } ZL_TensorClass;
 
@@ -36,8 +37,11 @@ typedef enum {
 #define ZL_TENSOR_SAMPLE_SIZE 4096
 
 /// @returns ZL_TensorClass_atypical16 or ZL_TensorClass_atypical32 for an f16,
-/// bf16 or f32 tensor with few distinct values (masks, constants...), else
-/// @p cls. @p sample is a scratch buffer of ZL_TENSOR_SAMPLE_SIZE elements.
+/// bf16 or f32 tensor with few distinct values (masks, constants...),
+/// ZL_TensorClass_upcast32 for an f32 tensor whose values mostly keep the 13
+/// lowest bits of their fraction at zero, as values converted from f16 or bf16
+/// do, else @p cls. @p sample is a scratch buffer of ZL_TENSOR_SAMPLE_SIZE
+/// elements.
 ZL_TensorClass ZL_TensorGraphs_refineClass(
         ZL_TensorClass cls,
         const uint8_t* data,
