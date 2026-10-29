@@ -306,6 +306,8 @@ void expectLegacyDecisionFieldsEqual(
     EXPECT_EQ(decision.delta_down_count, full.delta_down_count);
     EXPECT_EQ(decision.delta_min_s, full.delta_min_s);
     EXPECT_EQ(decision.delta_max_s, full.delta_max_s);
+    EXPECT_EQ(decision.delta_first_min_s, full.delta_first_min_s);
+    EXPECT_EQ(decision.delta_first_max_s, full.delta_first_max_s);
     EXPECT_EQ(decision.mean_abs_delta_u_fp, full.mean_abs_delta_u_fp);
     EXPECT_EQ(decision.cardinality_est, full.cardinality_est);
     EXPECT_EQ(decision.pair_cardinality_est, full.pair_cardinality_est);
@@ -359,6 +361,75 @@ TEST(TransformerFeaturesTest, Sub64DecisionExtractorsMatchFullFeatures)
 {
     expectSub64DecisionMatchesFull<uint16_t>();
     expectSub64DecisionMatchesFull<uint32_t>();
+}
+
+struct DeltaExtremaCase {
+    std::vector<uint8_t> values;
+    std::array<int64_t, 2> anchored; // delta_min_s, delta_max_s
+    std::array<int64_t, 2> first;    // delta_first_min_s, delta_first_max_s
+};
+
+template <typename T>
+void expectDeltaExtrema(const DeltaExtremaCase& expected)
+{
+    const std::vector<T> values(expected.values.begin(), expected.values.end());
+    const auto* const data = reinterpret_cast<const uint8_t*>(values.data());
+    size_t const nBytes    = values.size() * sizeof(T);
+    std::vector<uint32_t> scratchValues(values.size());
+    std::array<uint32_t, TRS_NUMERIC_MATCH4_TABLE_ENTRIES> matchTable = {};
+    LegacyExtractScratch extractScratch;
+    TRS_NumericExtractWorkspace workspace = {
+        .values          = scratchValues.data(),
+        .capacity        = scratchValues.size(),
+        .match4_table    = matchTable.data(),
+        .match4_capacity = matchTable.size(),
+    };
+    extractScratch.attach(workspace);
+
+    TRS_NumericFeatures full;
+    ASSERT_TRUE(TRS_numericFeatures_extract_from_bytes(
+            &full, data, nBytes, sizeof(T), &workspace));
+    EXPECT_EQ(
+            (std::array<int64_t, 2>{ full.delta_min_s, full.delta_max_s }),
+            expected.anchored);
+    EXPECT_EQ(
+            (std::array<int64_t, 2>{ full.delta_first_min_s,
+                                     full.delta_first_max_s }),
+            expected.first);
+    if (sizeof(T) == 1) {
+        return;
+    }
+
+    TRS_NumericFeatures decision;
+    ASSERT_TRUE(TRS_numericFeatures_extract_sub64_decision_from_bytes(
+            &decision, data, nBytes, sizeof(T), &workspace));
+    EXPECT_EQ(
+            (std::array<int64_t, 2>{ decision.delta_first_min_s,
+                                     decision.delta_first_max_s }),
+            expected.first);
+}
+
+TEST(TransformerFeaturesTest, DeltaFirstExtremaAreNotAnchoredAtZero)
+{
+    const std::vector<DeltaExtremaCase> cases = {
+        { { 10, 13, 16, 20 }, { 0, 4 }, { 3, 4 } },
+        { { 20, 16, 13, 10 }, { -4, 0 }, { -4, -3 } },
+        { { 10, 13, 11 }, { -2, 3 }, { -2, 3 } },
+        { { 10, 10 }, { 0, 0 }, { 0, 0 } },
+        { { 10 }, { 0, 0 }, { 0, 0 } },
+    };
+    for (size_t i = 0; i < cases.size(); ++i) {
+        SCOPED_TRACE(i);
+        expectDeltaExtrema<uint8_t>(cases[i]);
+        expectDeltaExtrema<uint16_t>(cases[i]);
+        expectDeltaExtrema<uint32_t>(cases[i]);
+    }
+}
+
+TEST(TransformerFeaturesTest, DeltaFirstExtremaUseSignedView)
+{
+    // u8 { 127, 128 } is int8 { 127, -128 }: one delta of -255.
+    expectDeltaExtrema<uint8_t>({ { 127, 128 }, { -255, 0 }, { -255, -255 } });
 }
 
 void expectNum64DecisionFieldsEqual(
