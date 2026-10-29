@@ -1263,8 +1263,10 @@ static const ZL_IDType* DCTX_getRegeneratedStreamIDs(
     for (size_t n = 0; n < nodeInfo->nbRegens; n++) {
         regensID[n] = (ZL_IDType)(inputEndIdx + nodeInfo->regenDistances[n]);
         ZL_ASSERT_LT(regensID[n], dctx->dataInfo.size);
-        ZL_ASSERT_NULL(
-                dctx->dataInfo.ptr[regensID[n]].data,
+        // Preserved streams can be regenerated again, see DCTX_newStream()
+        ZL_ASSERT(
+                dctx->preserveStreams
+                        || dctx->dataInfo.ptr[regensID[n]].data == NULL,
                 "Validated in frame header decoding");
     }
     return regensID;

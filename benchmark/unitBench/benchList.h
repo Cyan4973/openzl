@@ -326,31 +326,53 @@ static size_t zs2_decompress_wrapper(
 
 #include "openzl/decompress/dctx2.h"
 
+// State kept across benchmark rounds. The preserved streams of g_dctx
+// reference g_output, which must therefore outlive g_dctx.
+// Only unitBench.c includes this header, and prep functions receive a const
+// payload, so this state can only be shared through static globals.
+// NOLINTBEGIN(facebook-avoid-non-const-global-variables)
+// NOLINTBEGIN(facebook-hte-NamespaceScopedStaticDeclaration)
 static ZL_DCtx* g_dctx;
+static ZL_TypedBuffer* g_output;
+
+static void zs2_decompress_transform_free(void)
+{
+    ZL_DCtx_free(g_dctx);
+    g_dctx = NULL;
+    ZL_TypedBuffer_free(g_output);
+    g_output = NULL;
+}
+// NOLINTEND(facebook-hte-NamespaceScopedStaticDeclaration)
+// NOLINTEND(facebook-avoid-non-const-global-variables)
 
 static size_t
 zs2_decompress_transform_prep(void* src, size_t srcSize, const BenchPayload* bp)
 {
     (void)bp;
+    // Display functions run after every round, so state is released when the
+    // next file is prepared, or at exit.
+    static int freeAtExit = 0;
+    if (!freeAtExit) {
+        ZL_REQUIRE_EQ(atexit(zs2_decompress_transform_free), 0);
+        freeAtExit = 1;
+    }
+    zs2_decompress_transform_free();
+
     ZL_Report r = ZL_getDecompressedSize(src, srcSize);
     ZL_REQUIRE(!ZL_isError(r));
     size_t const dstSize = ZL_validResult(r);
-    void* const dst      = malloc(dstSize);
-    ZL_REQUIRE_NN(dst);
 
-    ZL_DCtx* const dctx = ZL_DCtx_create();
+    g_output = ZL_TypedBuffer_create();
+    ZL_REQUIRE_NN(g_output);
+    g_dctx = ZL_DCtx_create();
+    ZL_REQUIRE_NN(g_dctx);
 
-    DCTX_preserveStreams(dctx);
+    DCTX_preserveStreams(g_dctx);
 
-    stream_dump_register_decoders(dctx);
-    r = ZL_DCtx_decompress(dctx, dst, dstSize, src, srcSize);
+    stream_dump_register_decoders(g_dctx);
+    r = ZL_DCtx_decompressTBuffer(g_dctx, g_output, src, srcSize);
     ZL_REQUIRE_SUCCESS(r);
     ZL_REQUIRE_EQ(ZL_validResult(r), dstSize);
-
-    free(dst);
-
-    ZL_REQUIRE_NULL(g_dctx);
-    g_dctx = dctx;
 
     return srcSize;
 }
@@ -374,19 +396,6 @@ static size_t zs2_decompress_transform_wrapper(
     ZL_REQUIRE_SUCCESS(r);
 
     return ZL_validResult(r);
-}
-
-static void zs2_decompress_transform_display(
-        const char* srcname,
-        const char* fname,
-        BMK_runTime_t rt,
-        size_t srcSize)
-{
-    ZL_DCtx* const dctx = g_dctx;
-    ZL_REQUIRE_NN(dctx);
-    ZL_DCtx_free(dctx);
-    g_dctx = NULL;
-    decoderResult(srcname, fname, rt, srcSize);
 }
 
 #include "openzl/shared/varint.h"
@@ -527,7 +536,7 @@ Bench_Entry const scenarioList[] = {
     { "transposeDecode64", transposeDecode64_wrapper, .outSize = out_identical },
     { "varintEncode32", varintEncode32_wrapper, .outSize = varintEncode32_outdSize },
     { "zs2_decompress", zs2_decompress_wrapper, .outSize = zs2_decompress_outdSize, .display = decoderResult },
-    { "zs2_decompress_transform", zs2_decompress_transform_wrapper, .prep = zs2_decompress_transform_prep, .display = zs2_decompress_transform_display },
+    { "zs2_decompress_transform", zs2_decompress_transform_wrapper, .prep = zs2_decompress_transform_prep, .display = decoderResult },
     // Note: employing genericGraphCreation and genericGraphCompression here just to silence linter warning.
     // These assignments are not required, because these functions are default value when .graphF != NULL
     { "zstd", .graphF=zstdGraph, .init=genericGraphCreation, .func=genericGraphCompression,  },
