@@ -18,6 +18,7 @@ zs_unittest(
         "..:numpy_parser",
         "../..:custom_parsers",
         "../../../cpp:openzl_cpp",
+        "../../tests:pickle_builder",
         ":numpy_builder",
     ],
 )
@@ -34,6 +35,7 @@ zs_fuzzers(
         "..:numpy_parser",
         "../../../cpp:openzl_cpp",
         "../../../tests/datagen:datagen",
+        "../../tests:pickle_builder",
         "fbsource//xplat/security/lionhead/utils/lib_ftest:lib",
         ":numpy_builder",
     ],

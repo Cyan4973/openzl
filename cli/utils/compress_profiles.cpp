@@ -460,7 +460,7 @@ compressProfiles()
         std::string kNumPyName = "numpy";
         mp[kNumPyName]         = std::make_shared<CompressProfile>(
                 kNumPyName,
-                "NumPy array (.npy) or archive of arrays (.npz). Arrays deflated by np.savez_compressed are not inflated, so they gain nothing.",
+                "NumPy array (.npy), archive of arrays (.npz), or pickle holding NumPy arrays. Arrays deflated by np.savez_compressed are not inflated, so they gain nothing.",
                 [](ZL_Compressor* comp, void*, const ProfileArgs& args) {
                     const auto graph = ZL_NumPy_registerGraph(
                             comp,
@@ -470,6 +470,27 @@ compressProfiles()
                         throw InvalidArgsException(
                                 std::string(
                                         "Failed to build the numpy profile: ")
+                                + ZL_Compressor_getErrorContextString_fromError(
+                                        comp, ZL_RES_error(graph)));
+                    }
+                    return ZL_RES_value(graph);
+                },
+                nullptr,
+                true);
+
+        std::string kPickleName = "pickle";
+        mp[kPickleName]         = std::make_shared<CompressProfile>(
+                kPickleName,
+                "Python pickle (protocols 2 to 5). The NumPy arrays it holds, such as those of pandas DataFrames, are compressed as numbers.",
+                [](ZL_Compressor* comp, void*, const ProfileArgs& args) {
+                    const auto graph = ZL_NumPy_registerGraph(
+                            comp,
+                            args.chunkSize().value_or(
+                                    ZL_NUMPY_DEFAULT_CHUNK_SIZE));
+                    if (ZL_RES_isError(graph)) {
+                        throw InvalidArgsException(
+                                std::string(
+                                        "Failed to build the pickle profile: ")
                                 + ZL_Compressor_getErrorContextString_fromError(
                                         comp, ZL_RES_error(graph)));
                     }
