@@ -801,6 +801,19 @@ TEST_F(SafetensorsCompressorTest, CodesUpcastFloat32NearTheir16BitSize)
     EXPECT_LT(bf16Size, nativeSize / 2);
 }
 
+TEST_F(SafetensorsCompressorTest, TransposesTheBytesOfFloat16Tensors)
+{
+    const auto f16 = buildSafetensors(
+            { { "w", "F16", { 64, 512 }, pseudoRandomBytes(65536, 1) } });
+    useChunkSize(ZL_SAFETENSORS_DEFAULT_CHUNK_SIZE);
+    NodeCounter onF16(ZL_NODE_TRANSPOSE_SPLIT);
+
+    attachHooks(onF16);
+    expectRoundTrip(f16);
+
+    EXPECT_GT(onF16.count, 0u);
+}
+
 /// A format with an 8-byte header followed by a single tensor of 16-bit
 /// integers.
 struct FakeToken {
