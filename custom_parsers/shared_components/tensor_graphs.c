@@ -454,17 +454,18 @@ static ZL_GraphID TG_floatSuccessor(
 }
 
 /// float16 keeps 2 mantissa bits next to sign and exponent in its high byte,
-/// so it is split by byte. The low byte is noise in native float16 weights,
-/// where FSE falls back to raw storage at no cost, but weights converted from
-/// bfloat16 leave its 3 lowest bits at zero.
+/// so its bytes are transposed into 2 streams. The low byte is noise in native
+/// float16 weights, where FSE falls back to raw storage at no cost, but weights
+/// converted from bfloat16 leave its 3 lowest bits at zero.
 static ZL_GraphID TG_f16Successor(ZL_Compressor* compressor)
 {
-    const size_t fieldSizes[2]     = { 1, 1 };
-    const ZL_GraphID byteGraphs[2] = { ZL_GRAPH_FSE, ZL_GRAPH_FSE };
     return ZL_Compressor_buildACEGraphWithDefault(
             compressor,
-            ZL_Compressor_registerSplitByStructGraph(
-                    compressor, fieldSizes, byteGraphs, 2));
+            ZL_Compressor_registerStaticGraph_fromNode1o(
+                    compressor,
+                    ZL_NODE_CONVERT_SERIAL_TO_STRUCT2,
+                    ZL_Compressor_registerTransposeSplitGraph(
+                            compressor, ZL_GRAPH_FSE)));
 }
 
 void ZL_TensorGraphs_buildSuccessors(
